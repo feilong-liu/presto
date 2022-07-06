@@ -809,7 +809,13 @@ public class PlanPrinter
         @Override
         public Void visitValues(ValuesNode node, Void context)
         {
-            NodeRepresentation nodeOutput = addNode(node, "Values");
+            NodeRepresentation nodeOutput;
+            if (node.getTableName().isPresent()) {
+                nodeOutput = addNode(node, format("Values converted from TableScan[%s]", node.getTableName().get()));
+            }
+            else {
+                nodeOutput = addNode(node, "Values");
+            }
             for (List<RowExpression> row : node.getRows()) {
                 nodeOutput.appendDetailsLine("(" + row.stream().map(formatter::apply).collect(Collectors.joining(", ")) + ")");
             }

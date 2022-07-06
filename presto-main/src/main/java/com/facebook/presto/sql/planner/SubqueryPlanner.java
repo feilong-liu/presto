@@ -603,7 +603,8 @@ class SubqueryPlanner
                     node.getSourceLocation(),
                     idAllocator.getNextId(),
                     rewrittenNode.getOutputVariables(),
-                    rewrittenRows);
+                    rewrittenRows,
+                    Optional.empty());
         }
     }
 }
