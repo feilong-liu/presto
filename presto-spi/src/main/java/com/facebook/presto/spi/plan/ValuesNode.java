@@ -37,13 +37,15 @@ public final class ValuesNode
 {
     private final List<VariableReferenceExpression> outputVariables;
     private final List<List<RowExpression>> rows;
+    private final Optional<String> tableName;
 
     @JsonCreator
     public ValuesNode(
             Optional<SourceLocation> sourceLocation,
             @JsonProperty("id") PlanNodeId id,
             @JsonProperty("outputVariables") List<VariableReferenceExpression> outputVariables,
-            @JsonProperty("rows") List<List<RowExpression>> rows)
+            @JsonProperty("rows") List<List<RowExpression>> rows,
+            @JsonProperty("tableName") Optional<String> tableName)
     {
         super(sourceLocation, id);
         this.outputVariables = immutableListCopyOf(outputVariables);
@@ -54,7 +56,10 @@ public final class ValuesNode
                 throw new IllegalArgumentException(format("Expected row to have %s values, but row has %s values", outputVariables.size(), row.size()));
             }
         }
+        this.tableName = tableName;
     }
+
+    public Optional<String> getTableName() {return tableName;}
 
     @JsonProperty
     public List<List<RowExpression>> getRows()

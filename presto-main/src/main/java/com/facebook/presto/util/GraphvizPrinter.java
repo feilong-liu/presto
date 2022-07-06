@@ -471,7 +471,11 @@ public final class GraphvizPrinter
         @Override
         public Void visitValues(ValuesNode node, Void context)
         {
-            printNode(node, "Values", NODE_COLORS.get(NodeType.TABLESCAN));
+            if (node.getTableName().isPresent()) {
+                printNode(node, format("Values converted from TableScan[%s]", node.getTableName().get()), NODE_COLORS.get(NodeType.TABLESCAN));
+            } else {
+                printNode(node, "Values", NODE_COLORS.get(NodeType.TABLESCAN));
+            }
             return null;
         }
 
