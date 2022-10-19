@@ -14,6 +14,7 @@
 package com.facebook.presto.sql.planner.optimizations;
 
 import com.facebook.presto.Session;
+import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.WarningCollector;
 import com.facebook.presto.spi.plan.AggregationNode;
 import com.facebook.presto.spi.plan.PlanNode;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.facebook.presto.SystemSessionProperties.isRemoveRedundantDistinctAggregationEnabled;
+import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static com.facebook.presto.spi.plan.AggregationNode.isDistinct;
 import static com.facebook.presto.sql.planner.plan.ChildReplacer.replaceChildren;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -60,7 +62,11 @@ public class RemoveRedundantDistinctAggregation
     public PlanNode optimize(PlanNode plan, Session session, TypeProvider types, PlanVariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator, WarningCollector warningCollector)
     {
         if (isRemoveRedundantDistinctAggregationEnabled(session)) {
-            PlanWithProperties result = new RemoveRedundantDistinctAggregation.Rewriter().accept(plan);
+            Rewriter rewriter = new Rewriter();
+            PlanWithProperties result = rewriter.accept(plan);
+            if (!rewriter.optimized) {
+                throw new PrestoException(GENERIC_INTERNAL_ERROR, "no optimization triggered");
+            }
             return result.getNode();
         }
         return plan;
@@ -92,6 +98,8 @@ public class RemoveRedundantDistinctAggregation
     private class Rewriter
             extends InternalPlanVisitor<PlanWithProperties, Void>
     {
+        public boolean optimized;
+
         @Override
         public PlanWithProperties visitPlan(PlanNode node, Void context)
         {
@@ -105,6 +113,7 @@ public class RemoveRedundantDistinctAggregation
             PlanWithProperties child = accept(node.getSource());
             if (isDistinct(node)) {
                 if (child.getProperties().stream().anyMatch(node.getGroupingKeys()::containsAll)) {
+                    optimized = true;
                     return child;
                 }
             }
