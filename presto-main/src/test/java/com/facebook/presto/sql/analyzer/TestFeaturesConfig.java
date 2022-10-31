@@ -211,7 +211,8 @@ public class TestFeaturesConfig
                 .setNativeExecutionExecutablePath("./presto_server")
                 .setRandomizeOuterJoinNullKeyEnabled(false)
                 .setOptimizeConditionalAggregationEnabled(false)
-                .setRemoveRedundantDistinctAggregationEnabled(true));
+                .setRemoveRedundantDistinctAggregationEnabled(true)
+                .setRemoveRedundantOrderByInWindowEnabled(false));
     }
 
     @Test
@@ -373,6 +374,7 @@ public class TestFeaturesConfig
                 .put("optimizer.randomize-outer-join-null-key", "true")
                 .put("optimizer.optimize-conditional-aggregation-enabled", "true")
                 .put("optimizer.remove-redundant-distinct-aggregation-enabled", "false")
+                .put("optimizer.remove-redundant-orderby-in-window-enabled", "true")
                 .build();
 
         FeaturesConfig expected = new FeaturesConfig()
@@ -531,7 +533,8 @@ public class TestFeaturesConfig
                 .setNativeExecutionExecutablePath("/bin/echo")
                 .setRandomizeOuterJoinNullKeyEnabled(true)
                 .setOptimizeConditionalAggregationEnabled(true)
-                .setRemoveRedundantDistinctAggregationEnabled(false);
+                .setRemoveRedundantDistinctAggregationEnabled(false)
+                .setRemoveRedundantOrderByInWindowEnabled(true);
         assertFullMapping(properties, expected);
     }
 

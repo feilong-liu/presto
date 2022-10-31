@@ -249,6 +249,7 @@ public final class SystemSessionProperties
     public static final String OPTIMIZE_CONDITIONAL_AGGREGATION_ENABLED = "optimize_conditional_aggregation_enabled";
     public static final String ANALYZER_TYPE = "analyzer_type";
     public static final String REMOVE_REDUNDANT_DISTINCT_AGGREGATION_ENABLED = "remove_redundant_distinct_aggregation_enabled";
+    public static final String REMOVE_REDUNDANT_ORDER_BY_IN_WINDOW_ENABLED = "remove_redundant_order_by_in_window_enabled";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1415,6 +1416,11 @@ public final class SystemSessionProperties
                         REMOVE_REDUNDANT_DISTINCT_AGGREGATION_ENABLED,
                         "Enable removing distinct aggregation node if input is already distinct",
                         featuresConfig.isRemoveRedundantDistinctAggregationEnabled(),
+                        false),
+                booleanProperty(
+                        REMOVE_REDUNDANT_ORDER_BY_IN_WINDOW_ENABLED,
+                        "Enable removing order by in window node if order by is a subset of partition by",
+                        featuresConfig.isRemoveRedundantOrderByInWindowEnabled(),
                         false));
     }
 
@@ -2369,5 +2375,10 @@ public final class SystemSessionProperties
     public static boolean isRemoveRedundantDistinctAggregationEnabled(Session session)
     {
         return session.getSystemProperty(REMOVE_REDUNDANT_DISTINCT_AGGREGATION_ENABLED, Boolean.class);
+    }
+
+    public static boolean isRemoveRedundantOrderByInWindowEnabled(Session session)
+    {
+        return session.getSystemProperty(REMOVE_REDUNDANT_ORDER_BY_IN_WINDOW_ENABLED, Boolean.class);
     }
 }
