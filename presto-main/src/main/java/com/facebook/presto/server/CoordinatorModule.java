@@ -132,6 +132,7 @@ import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.weakref.jmx.ObjectNames.generatedNameOf;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
+import com.facebook.presto.resourceGroups.reloading.ReloadingResourceGroupConfigurationManager;
 
 public class CoordinatorModule
         extends AbstractConfigurationAwareModule
@@ -192,6 +193,7 @@ public class CoordinatorModule
         binder.bind(ResourceGroupManager.class).to(InternalResourceGroupManager.class);
         binder.bind(LegacyResourceGroupConfigurationManager.class).in(Scopes.SINGLETON);
         binder.bind(RetryCircuitBreaker.class).in(Scopes.SINGLETON);
+        newExporter(binder).export(ReloadingResourceGroupConfigurationManager.class).withGeneratedName();
         newExporter(binder).export(RetryCircuitBreaker.class).withGeneratedName();
 
         binder.bind(QueryBlockingRateLimiter.class).in(Scopes.SINGLETON);

@@ -474,6 +474,14 @@
             <artifactId>ratis-common</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>com.facebook.presto</groupId>
+            <artifactId>presto-resource-group-managers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.facebook.presto</groupId>
+            <artifactId>presto-resource-group-managers</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
