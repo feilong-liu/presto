@@ -15,6 +15,7 @@ package com.facebook.presto.sql.planner.optimizations;
 
 import com.facebook.presto.Session;
 import com.facebook.presto.spi.WarningCollector;
+import com.facebook.presto.spi.eventlistener.PlanOptimizerInformation;
 import com.facebook.presto.spi.plan.AggregationNode;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.PlanNodeIdAllocator;
@@ -26,6 +27,7 @@ import com.facebook.presto.sql.planner.plan.InternalPlanVisitor;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.facebook.presto.SystemSessionProperties.isRemoveRedundantDistinctAggregationEnabled;
@@ -58,7 +60,7 @@ public class RemoveRedundantDistinctAggregation
     public PlanNode optimize(PlanNode plan, Session session, TypeProvider types, PlanVariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator, WarningCollector warningCollector)
     {
         if (isRemoveRedundantDistinctAggregationEnabled(session)) {
-            PlanWithProperties result = new RemoveRedundantDistinctAggregation.Rewriter().accept(plan);
+            PlanWithProperties result = new RemoveRedundantDistinctAggregation.Rewriter().accept(plan, session.getOptimizerInformationCollector());
             return result.getNode();
         }
         return plan;
@@ -88,20 +90,21 @@ public class RemoveRedundantDistinctAggregation
     }
 
     private static class Rewriter
-            extends InternalPlanVisitor<PlanWithProperties, Void>
+            extends InternalPlanVisitor<PlanWithProperties, OptimizerInformationCollector>
     {
         @Override
-        public PlanWithProperties visitPlan(PlanNode node, Void context)
+        public PlanWithProperties visitPlan(PlanNode node, OptimizerInformationCollector optimizerInformationCollector)
         {
             // For nodes such as join, unnest etc. the distinct properties may be violated, hence pass empty list for these cases.
-            return planAndRecplace(node, false);
+            return planAndRecplace(node, optimizerInformationCollector, false);
         }
 
         @Override
-        public PlanWithProperties visitAggregation(AggregationNode node, Void context)
+        public PlanWithProperties visitAggregation(AggregationNode node, OptimizerInformationCollector optimizerInformationCollector)
         {
-            PlanWithProperties child = accept(node.getSource());
+            PlanWithProperties child = accept(node.getSource(), optimizerInformationCollector);
             if (isDistinct(node) && child.getProperties().stream().anyMatch(node.getGroupingKeys()::containsAll)) {
+                optimizerInformationCollector.addInformation(new PlanOptimizerInformation(this.getClass().getSimpleName(), true, Optional.empty()));
                 return child;
             }
             ImmutableList.Builder<Set<VariableReferenceExpression>> properties = ImmutableList.builder();
@@ -114,22 +117,22 @@ public class RemoveRedundantDistinctAggregation
         }
 
         @Override
-        public PlanWithProperties visitProject(ProjectNode node, Void context)
+        public PlanWithProperties visitProject(ProjectNode node, OptimizerInformationCollector optimizerInformationCollector)
         {
-            return planAndRecplace(node, true);
+            return planAndRecplace(node, optimizerInformationCollector, true);
         }
 
-        private PlanWithProperties accept(PlanNode node)
+        private PlanWithProperties accept(PlanNode node, OptimizerInformationCollector optimizerInformationCollector)
         {
-            PlanWithProperties result = node.accept(this, null);
+            PlanWithProperties result = node.accept(this, optimizerInformationCollector);
             return new PlanWithProperties(
                     result.getNode().assignStatsEquivalentPlanNode(node.getStatsEquivalentPlanNode()),
                     result.getProperties());
         }
 
-        private PlanWithProperties planAndRecplace(PlanNode node, boolean passProperties)
+        private PlanWithProperties planAndRecplace(PlanNode node, OptimizerInformationCollector optimizerInformationCollector, boolean passProperties)
         {
-            List<PlanWithProperties> children = node.getSources().stream().map(this::accept).collect(toImmutableList());
+            List<PlanWithProperties> children = node.getSources().stream().map(x -> accept(x, optimizerInformationCollector)).collect(toImmutableList());
             PlanNode result = replaceChildren(node, children.stream().map(PlanWithProperties::getNode).collect(toImmutableList()));
             if (!passProperties) {
                 return new PlanWithProperties(result, ImmutableList.of());
