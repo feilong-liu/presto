@@ -387,7 +387,7 @@ public class HiveFilterPushdown
             RowExpression replacedExpression = replaceExpression(expression, symbolToColumnMapping);
             // replaceExpression() may further optimize the expression; if the resulting expression is always false, then return empty Values node
             if (FALSE_CONSTANT.equals(replacedExpression)) {
-                session.getWarningCollector().add((new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' returns 0 rows, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName()))));
+                session.getWarningCollector().add((new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' with filter %s returns 0 rows, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), expression.toString(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName()))));
                 return new ValuesNode(tableScan.getSourceLocation(), idAllocator.getNextId(), tableScan.getOutputVariables(), ImmutableList.of(), Optional.of(tableScan.getTable().getConnectorHandle().toString()));
             }
             ConnectorPushdownFilterResult pushdownFilterResult = pushdownFilter(
@@ -399,7 +399,7 @@ public class HiveFilterPushdown
 
             ConnectorTableLayout layout = pushdownFilterResult.getLayout();
             if (layout.getPredicate().isNone()) {
-                session.getWarningCollector().add((new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' returns 0 rows, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName()))));
+                session.getWarningCollector().add((new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' with filter %s returns 0 rows, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), expression.toString(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName()))));
                 return new ValuesNode(tableScan.getSourceLocation(), idAllocator.getNextId(), tableScan.getOutputVariables(), ImmutableList.of(), Optional.of(tableScan.getTable().getConnectorHandle().toString()));
             }
 
@@ -436,7 +436,7 @@ public class HiveFilterPushdown
                     TRUE_CONSTANT,
                     handle.getLayout());
             if (pushdownFilterResult.getLayout().getPredicate().isNone()) {
-                session.getWarningCollector().add(new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' returns 0 rows, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName())));
+                session.getWarningCollector().add(new PrestoWarning(HIVE_TABLESCAN_CONVERTED_TO_VALUESNODE, format("Table '%s' is not found, and is converted to an empty %s by %s", tableScan.getTable().getConnectorHandle(), ValuesNode.class.getSimpleName(), HiveFilterPushdown.class.getSimpleName())));
                 return new ValuesNode(tableScan.getSourceLocation(), idAllocator.getNextId(), tableScan.getOutputVariables(), ImmutableList.of(), Optional.of(tableScan.getTable().getConnectorHandle().toString()));
             }
 
