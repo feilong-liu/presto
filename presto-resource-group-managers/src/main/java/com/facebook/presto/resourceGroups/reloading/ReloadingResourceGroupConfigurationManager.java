@@ -31,8 +31,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import io.airlift.units.Duration;
+import org.weakref.jmx.MBeanExporter;
 import org.weakref.jmx.Managed;
 import org.weakref.jmx.Nested;
+import org.weakref.jmx.ObjectNames;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -75,6 +77,7 @@ public class ReloadingResourceGroupConfigurationManager
     private final AtomicReference<List<ResourceGroupSelector>> selectors = new AtomicReference<>();
     private final AtomicReference<Optional<Duration>> cpuQuotaPeriod = new AtomicReference<>(Optional.empty());
     private final ManagerSpecProvider managerSpecProvider;
+    private final MBeanExporter exporter;
     private final ScheduledExecutorService configExecutor = newSingleThreadScheduledExecutor(daemonThreadsNamed("DbResourceGroupConfigurationManager"));
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicLong lastRefresh = new AtomicLong();
@@ -84,13 +87,17 @@ public class ReloadingResourceGroupConfigurationManager
     private final CounterStat refreshFailures = new CounterStat();
 
     @Inject
-    public ReloadingResourceGroupConfigurationManager(ClusterMemoryPoolManager memoryPoolManager, ReloadingResourceGroupConfig config, ManagerSpecProvider managerSpecProvider)
+    public ReloadingResourceGroupConfigurationManager(ClusterMemoryPoolManager memoryPoolManager, ReloadingResourceGroupConfig config, ManagerSpecProvider managerSpecProvider, MBeanExporter exporter)
     {
         super(memoryPoolManager);
         requireNonNull(memoryPoolManager, "memoryPoolManager is null");
         this.maxRefreshInterval = config.getMaxRefreshInterval();
         this.exactMatchSelectorEnabled = config.getExactMatchSelectorEnabled();
         this.managerSpecProvider = requireNonNull(managerSpecProvider, "provider is null");
+        this.exporter = exporter;
+        this.exporter.export(ObjectNames.builder(ReloadingResourceGroupConfigurationManager.class)
+                .withProperty("name", "refreshFailures")
+                .build(), refreshFailures.getTotalCount());
         load();
     }
 
