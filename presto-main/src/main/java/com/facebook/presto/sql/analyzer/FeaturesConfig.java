@@ -248,6 +248,7 @@ public class FeaturesConfig
     private boolean prefilterForGroupbyLimit;
     private boolean isOptimizeJoinProbeWithEmptyBuildRuntime;
     private boolean useDefaultsForCorrelatedAggregationPushdownThroughOuterJoins = true;
+
     public enum PartitioningPrecisionStrategy
     {
         // Let Presto decide when to repartition

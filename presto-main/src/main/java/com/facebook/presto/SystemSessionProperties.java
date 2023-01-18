@@ -257,6 +257,9 @@ public final class SystemSessionProperties
     public static final String PREFILTER_FOR_GROUPBY_LIMIT_TIMEOUT_MS = "prefilter_for_groupby_limit_timeout_ms";
     public static final String OPTIMIZE_JOIN_PROBE_FOR_EMPTY_BUILD_RUNTIME = "optimize_join_probe_for_empty_build_runtime";
     public static final String USE_DEFAULTS_FOR_CORRELATED_AGGREGATION_PUSHDOWN_THROUGH_OUTER_JOINS = "use_defaults_for_correlated_aggregation_pushdown_through_outer_joins";
+    public static final String STAR_JOIN_ENABLED = "star_join_enabled";
+    public static final String STAR_JOIN_LOG_ENABLED = "star_join_log_enabled";
+    public static final String STAR_JOIN_PROBE_TYPE = "star_join_probe_type";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1462,6 +1465,21 @@ public final class SystemSessionProperties
                         USE_DEFAULTS_FOR_CORRELATED_AGGREGATION_PUSHDOWN_THROUGH_OUTER_JOINS,
                         "Coalesce with defaults for correlated aggregations",
                         featuresConfig.isUseDefaultsForCorrelatedAggregationPushdownThroughOuterJoins(),
+                        false),
+                booleanProperty(
+                        STAR_JOIN_ENABLED,
+                        "Enable star join",
+                        true,
+                        false),
+                booleanProperty(
+                        STAR_JOIN_LOG_ENABLED,
+                        "Enable star join",
+                        false,
+                        false),
+                stringProperty(
+                        STAR_JOIN_PROBE_TYPE,
+                        "The native engine executable file path for native engine execution",
+                        "list",
                         false));
     }
 
@@ -2463,5 +2481,20 @@ public final class SystemSessionProperties
     public static boolean useDefaultsForCorrelatedAggregationPushdownThroughOuterJoins(Session session)
     {
         return session.getSystemProperty(USE_DEFAULTS_FOR_CORRELATED_AGGREGATION_PUSHDOWN_THROUGH_OUTER_JOINS, Boolean.class);
+    }
+
+    public static boolean isStarJoinEnabled(Session session)
+    {
+        return session.getSystemProperty(STAR_JOIN_ENABLED, Boolean.class);
+    }
+
+    public static boolean isStarJoinLogEnabled(Session session)
+    {
+        return session.getSystemProperty(STAR_JOIN_LOG_ENABLED, Boolean.class);
+    }
+
+    public static String getStarJoinProbeType(Session session)
+    {
+        return session.getSystemProperty(STAR_JOIN_PROBE_TYPE, String.class);
     }
 }
