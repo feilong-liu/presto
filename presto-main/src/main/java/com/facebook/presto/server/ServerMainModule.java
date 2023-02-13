@@ -68,6 +68,7 @@ import com.facebook.presto.execution.TaskThresholdMemoryRevokingScheduler;
 import com.facebook.presto.execution.buffer.SpoolingOutputBufferFactory;
 import com.facebook.presto.execution.executor.MultilevelSplitQueue;
 import com.facebook.presto.execution.executor.TaskExecutor;
+import com.facebook.presto.execution.resourceGroups.InternalResourceGroupManager;
 import com.facebook.presto.execution.scheduler.FlatNetworkTopology;
 import com.facebook.presto.execution.scheduler.LegacyNetworkTopology;
 import com.facebook.presto.execution.scheduler.NetworkTopology;
@@ -359,6 +360,7 @@ public class ServerMainModule
         binder.bind(NodeSchedulerExporter.class).in(Scopes.SINGLETON);
         binder.bind(NodeTaskMap.class).in(Scopes.SINGLETON);
         newExporter(binder).export(NodeScheduler.class).withGeneratedName();
+        newExporter(binder).export(InternalResourceGroupManager.class).withGeneratedName();
 
         // network topology
         // TODO: move to CoordinatorModule when NodeScheduler is moved
