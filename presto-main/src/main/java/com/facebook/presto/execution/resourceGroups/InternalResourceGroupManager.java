@@ -74,6 +74,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static org.weakref.jmx.ObjectNames.generatedNameOf;
 
 @ThreadSafe
 public final class InternalResourceGroupManager<C>
@@ -192,6 +193,8 @@ public final class InternalResourceGroupManager<C>
         checkState(configurationManagerFactory != null, "Resource group configuration manager %s is not registered", name);
 
         ResourceGroupConfigurationManager<C> configurationManager = cast(configurationManagerFactory.create(ImmutableMap.copyOf(properties), configurationManagerContext));
+        exporter.export(generatedNameOf(InternalResourceGroupManager.class, "ReloadingResourceGroupConfigurationManager"), configurationManager);
+        log.info("-- InternalResourceGroupManager export ReloadingResourceGroupConfigurationManager  %s --", generatedNameOf(InternalResourceGroupManager.class, "ReloadingResourceGroupConfigurationManager"));
         checkState(this.configurationManager.compareAndSet(cast(legacyManager), configurationManager), "configurationManager already set");
 
         log.info("-- Loaded resource group configuration manager %s --", name);
@@ -211,6 +214,7 @@ public final class InternalResourceGroupManager<C>
     {
         refreshExecutor.shutdownNow();
         resourceGroupRuntimeExecutor.stop();
+        exporter.unexport(generatedNameOf(InternalResourceGroupManager.class, "ReloadingResourceGroupConfigurationManager"));
     }
 
     @PostConstruct
