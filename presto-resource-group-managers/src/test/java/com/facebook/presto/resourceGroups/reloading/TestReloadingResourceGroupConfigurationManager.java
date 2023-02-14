@@ -73,7 +73,7 @@ public class TestReloadingResourceGroupConfigurationManager
         dao.insertResourceGroup(2, "sub", "2MB", 4, 3, 3, null, 5, null, null, null, null, null, null, 1L, ENVIRONMENT);
         dao.insertSelector(2, 1, null, null, null, null, null, null);
         DbManagerSpecProvider dbManagerSpecProvider = new DbManagerSpecProvider(daoProvider.get(), ENVIRONMENT, new ReloadingResourceGroupConfig());
-        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider);
+        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider, null);
         AtomicBoolean exported = new AtomicBoolean();
         InternalResourceGroup global = new InternalResourceGroup.RootInternalResourceGroup("global", (group, export) -> exported.set(export), directExecutor(), ignored -> Optional.empty(), rg -> false);
         manager.configure(global, new SelectionContext<>(global.getId(), new VariableMap(ImmutableMap.of("USER", "user"))));
@@ -97,7 +97,7 @@ public class TestReloadingResourceGroupConfigurationManager
         dao.insertResourceGroupsGlobalProperties("cpu_quota_period", "1h");
         dao.insertSelector(2, 1, null, null, null, null, null, null);
         DbManagerSpecProvider dbManagerSpecProvider = new DbManagerSpecProvider(daoProvider.get(), ENVIRONMENT, new ReloadingResourceGroupConfig());
-        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider);
+        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider, null);
         InternalResourceGroup missing = new InternalResourceGroup.RootInternalResourceGroup("missing", (group, export) -> {}, directExecutor(), ignored -> Optional.empty(), rg -> false);
         manager.configure(missing, new SelectionContext<>(missing.getId(), new VariableMap(ImmutableMap.of("USER", "user"))));
     }
@@ -116,7 +116,7 @@ public class TestReloadingResourceGroupConfigurationManager
         dao.insertSelector(2, 1, null, null, null, null, null, null);
         dao.insertResourceGroupsGlobalProperties("cpu_quota_period", "1h");
         DbManagerSpecProvider dbManagerSpecProvider = new DbManagerSpecProvider(daoProvider.get(), ENVIRONMENT, new ReloadingResourceGroupConfig());
-        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider);
+        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, new ReloadingResourceGroupConfig(), dbManagerSpecProvider, null);
         manager.start();
         AtomicBoolean exported = new AtomicBoolean();
         InternalResourceGroup global = new InternalResourceGroup.RootInternalResourceGroup("global", (group, export) -> exported.set(export), directExecutor(), ignored -> Optional.empty(), rg -> false);
@@ -157,13 +157,13 @@ public class TestReloadingResourceGroupConfigurationManager
         ReloadingResourceGroupConfig config = new ReloadingResourceGroupConfig();
         config.setExactMatchSelectorEnabled(true);
         DbManagerSpecProvider dbManagerSpecProvider = new DbManagerSpecProvider(daoProvider.get(), ENVIRONMENT, config);
-        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, config, dbManagerSpecProvider);
+        ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, config, dbManagerSpecProvider, null);
         manager.load();
         assertEquals(manager.getSelectors().size(), 2);
         assertTrue(manager.getSelectors().get(0) instanceof DbSourceExactMatchSelector);
 
         config.setExactMatchSelectorEnabled(false);
-        manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, config, dbManagerSpecProvider);
+        manager = new ReloadingResourceGroupConfigurationManager((poolId, listener) -> {}, config, dbManagerSpecProvider, null);
         manager.load();
         assertEquals(manager.getSelectors().size(), 1);
         assertFalse(manager.getSelectors().get(0) instanceof DbSourceExactMatchSelector);
@@ -182,7 +182,8 @@ public class TestReloadingResourceGroupConfigurationManager
         ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager(
                 (poolId, listener) -> {},
                 new ReloadingResourceGroupConfig().setMaxRefreshInterval(Duration.valueOf("1ms")),
-                dbManagerSpecProvider);
+                dbManagerSpecProvider,
+                null);
 
         manager.getSelectors();
     }
@@ -200,7 +201,8 @@ public class TestReloadingResourceGroupConfigurationManager
         ReloadingResourceGroupConfigurationManager manager = new ReloadingResourceGroupConfigurationManager(
                 (poolId, listener) -> {},
                 new ReloadingResourceGroupConfig().setMaxRefreshInterval(Duration.valueOf("1ms")),
-                dbManagerSpecProvider);
+                dbManagerSpecProvider,
+                null);
 
         dao.dropSelectorsTable();
         manager.load();

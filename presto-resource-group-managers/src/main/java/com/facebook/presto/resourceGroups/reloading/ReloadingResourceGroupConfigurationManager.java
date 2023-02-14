@@ -31,6 +31,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import io.airlift.units.Duration;
+import org.weakref.jmx.MBeanExporter;
 import org.weakref.jmx.Managed;
 import org.weakref.jmx.Nested;
 
@@ -62,6 +63,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.weakref.jmx.ObjectNames.generatedNameOf;
 
 public class ReloadingResourceGroupConfigurationManager
         extends AbstractResourceConfigurationManager
@@ -80,17 +82,20 @@ public class ReloadingResourceGroupConfigurationManager
     private final AtomicLong lastRefresh = new AtomicLong();
     private final Duration maxRefreshInterval;
     private final boolean exactMatchSelectorEnabled;
+    private final MBeanExporter exporter;
 
     private final CounterStat refreshFailures = new CounterStat();
 
     @Inject
-    public ReloadingResourceGroupConfigurationManager(ClusterMemoryPoolManager memoryPoolManager, ReloadingResourceGroupConfig config, ManagerSpecProvider managerSpecProvider)
+    public ReloadingResourceGroupConfigurationManager(ClusterMemoryPoolManager memoryPoolManager, ReloadingResourceGroupConfig config, ManagerSpecProvider managerSpecProvider, MBeanExporter exporter)
     {
         super(memoryPoolManager);
         requireNonNull(memoryPoolManager, "memoryPoolManager is null");
         this.maxRefreshInterval = config.getMaxRefreshInterval();
         this.exactMatchSelectorEnabled = config.getExactMatchSelectorEnabled();
         this.managerSpecProvider = requireNonNull(managerSpecProvider, "provider is null");
+        this.exporter = exporter;
+        this.exporter.export(generatedNameOf(ReloadingResourceGroupConfigurationManager.class, "refreshFailures"), refreshFailures);
         load();
     }
 
@@ -116,6 +121,7 @@ public class ReloadingResourceGroupConfigurationManager
     public void destroy()
     {
         configExecutor.shutdownNow();
+        exporter.unexport(generatedNameOf(ReloadingResourceGroupConfigurationManager.class, "refreshFailures"));
     }
 
     @PostConstruct

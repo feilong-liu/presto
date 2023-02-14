@@ -18,6 +18,10 @@ import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Scopes;
 
+import javax.management.MBeanServer;
+
+import java.lang.management.ManagementFactory;
+
 import static com.facebook.airlift.configuration.ConfigBinder.configBinder;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 
@@ -31,5 +35,7 @@ public class ReloadingResourceGroupConfigurationManagerModule
         binder.bind(ReloadingResourceGroupConfigurationManager.class).in(Scopes.SINGLETON);
         binder.bind(ResourceGroupConfigurationManager.class).to(ReloadingResourceGroupConfigurationManager.class).in(Scopes.SINGLETON);
         newExporter(binder).export(ReloadingResourceGroupConfigurationManager.class).withGeneratedName();
+        MBeanServer platformMBeanServer = ManagementFactory.getPlatformMBeanServer();
+        binder.bind(MBeanServer.class).toInstance(platformMBeanServer);
     }
 }
