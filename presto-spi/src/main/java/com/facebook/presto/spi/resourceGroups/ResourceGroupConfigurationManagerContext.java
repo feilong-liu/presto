@@ -14,6 +14,7 @@
 package com.facebook.presto.spi.resourceGroups;
 
 import com.facebook.presto.spi.memory.ClusterMemoryPoolManager;
+import org.weakref.jmx.MBeanExporter;
 
 public interface ResourceGroupConfigurationManagerContext
 {
@@ -23,6 +24,11 @@ public interface ResourceGroupConfigurationManagerContext
     }
 
     default String getEnvironment()
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    default MBeanExporter getMBeanExporter()
     {
         throw new UnsupportedOperationException();
     }

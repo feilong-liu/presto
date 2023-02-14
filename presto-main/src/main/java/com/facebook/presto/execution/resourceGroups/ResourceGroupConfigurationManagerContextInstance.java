@@ -15,6 +15,7 @@ package com.facebook.presto.execution.resourceGroups;
 
 import com.facebook.presto.spi.memory.ClusterMemoryPoolManager;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupConfigurationManagerContext;
+import org.weakref.jmx.MBeanExporter;
 
 import static java.util.Objects.requireNonNull;
 
@@ -23,11 +24,13 @@ public class ResourceGroupConfigurationManagerContextInstance
 {
     private final ClusterMemoryPoolManager memoryPoolManager;
     private final String environment;
+    private final MBeanExporter exporter;
 
-    public ResourceGroupConfigurationManagerContextInstance(ClusterMemoryPoolManager memoryPoolManager, String environment)
+    public ResourceGroupConfigurationManagerContextInstance(ClusterMemoryPoolManager memoryPoolManager, String environment, MBeanExporter exporter)
     {
         this.memoryPoolManager = requireNonNull(memoryPoolManager, "memoryPoolManager is null");
         this.environment = requireNonNull(environment, "environment is null");
+        this.exporter = requireNonNull(exporter, "exporter is null");
     }
 
     @Override
@@ -40,5 +43,11 @@ public class ResourceGroupConfigurationManagerContextInstance
     public String getEnvironment()
     {
         return environment;
+    }
+
+    @Override
+    public MBeanExporter getMBeanExporter()
+    {
+        return exporter;
     }
 }

@@ -23,6 +23,7 @@ import com.facebook.presto.spi.resourceGroups.ResourceGroupConfigurationManager;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupConfigurationManagerContext;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupConfigurationManagerFactory;
 import com.google.inject.Injector;
+import org.weakref.jmx.MBeanExporter;
 
 import java.util.Map;
 
@@ -46,7 +47,8 @@ public class DbResourceGroupConfigurationManagerFactory
                     new DbResourceGroupsModule(),
                     new ReloadingResourceGroupConfigurationManagerModule(),
                     binder -> binder.bind(String.class).annotatedWith(ForEnvironment.class).toInstance(context.getEnvironment()),
-                    binder -> binder.bind(ClusterMemoryPoolManager.class).toInstance(context.getMemoryPoolManager()));
+                    binder -> binder.bind(ClusterMemoryPoolManager.class).toInstance(context.getMemoryPoolManager()),
+                    binder -> binder.bind(MBeanExporter.class).toInstance(context.getMBeanExporter()));
 
             Injector injector = app
                     .doNotInitializeLogging()

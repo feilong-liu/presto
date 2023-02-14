@@ -117,7 +117,7 @@ public final class InternalResourceGroupManager<C>
     {
         requireNonNull(queryManagerConfig, "queryManagerConfig is null");
         this.exporter = requireNonNull(exporter, "exporter is null");
-        this.configurationManagerContext = new ResourceGroupConfigurationManagerContextInstance(memoryPoolManager, nodeInfo.getEnvironment());
+        this.configurationManagerContext = new ResourceGroupConfigurationManagerContextInstance(memoryPoolManager, nodeInfo.getEnvironment(), exporter);
         this.legacyManager = requireNonNull(legacyManager, "legacyManager is null");
         this.configurationManager = new AtomicReference<>(cast(legacyManager));
         this.maxTotalRunningTaskCountToNotExecuteNewQuery = queryManagerConfig.getMaxTotalRunningTaskCountToNotExecuteNewQuery();
