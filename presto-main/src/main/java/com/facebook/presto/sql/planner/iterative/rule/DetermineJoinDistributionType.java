@@ -45,7 +45,6 @@ import static com.facebook.presto.SystemSessionProperties.getJoinMaxBroadcastTab
 import static com.facebook.presto.SystemSessionProperties.isSizeBasedJoinDistributionTypeEnabled;
 import static com.facebook.presto.cost.CostCalculatorWithEstimatedExchanges.calculateJoinCostWithoutOutput;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionType.AUTOMATIC;
-import static com.facebook.presto.sql.planner.optimizations.QueryCardinalityUtil.isAtMostScalar;
 import static com.facebook.presto.sql.planner.plan.JoinNode.DistributionType.PARTITIONED;
 import static com.facebook.presto.sql.planner.plan.JoinNode.DistributionType.REPLICATED;
 import static com.facebook.presto.sql.planner.plan.Patterns.join;
@@ -285,7 +284,8 @@ public class DetermineJoinDistributionType
         if (getJoinDistributionType(context.getSession()).equals(JoinDistributionType.PARTITIONED)) {
             return false;
         }
-        return isAtMostScalar(joinNode.getRight(), context.getLookup());
+        return getJoinDistributionType(context.getSession()).equals(JoinDistributionType.BROADCAST);
+        //return isAtMostScalar(joinNode.getRight(), context.getLookup());
     }
 
     private PlanNodeWithCost getJoinNodeWithCost(Context context, JoinNode possibleJoinNode)

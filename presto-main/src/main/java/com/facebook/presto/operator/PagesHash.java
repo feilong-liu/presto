@@ -127,6 +127,43 @@ public final class PagesHash
         expectedHashCollisions = estimateNumberOfHashCollisions(positionCount, hashSize);
     }
 
+    public PagesHash(
+            AdaptiveLongBigArray addresses,
+            int positionCount,
+            PagesHashStrategy pagesHashStrategy,
+            PositionLinks.FactoryBuilder positionLinks,
+            StarJoinPageIndex starJoinPageIndex,
+            int partition,
+            int table)
+    {
+        this.addresses = requireNonNull(addresses, "addresses is null");
+        this.positionCount = positionCount;
+        this.pagesHashStrategy = requireNonNull(pagesHashStrategy, "pagesHashStrategy is null");
+        this.channelCount = pagesHashStrategy.getChannelCount();
+
+        // not used in this case
+        int hashSize = HashCommon.arraySize(positionCount, 0.75f);
+
+        // not used
+        mask = hashSize - 1;
+        key = new int[1];
+        Arrays.fill(key, -1);
+
+        positionToHashes = new byte[positionCount];
+        starJoinPageIndex.setPositionToHashes(partition, table, positionToHashes);
+
+        // We will process addresses in batches, to save memory on array of hashes.
+        int positionsInStep = Math.min(positionCount + 1, (int) CACHE_SIZE.toBytes() / Integer.SIZE);
+        long hashCollisionsLocal = 0;
+
+        starJoinPageIndex.populate(table, partition, positionToHashes, positionsInStep, positionCount, positionLinks);
+
+        size = addresses.getRetainedSizeInBytes() + pagesHashStrategy.getSizeInBytes() +
+                sizeOf(key) + sizeOf(positionToHashes);
+        hashCollisions = hashCollisionsLocal;
+        expectedHashCollisions = estimateNumberOfHashCollisions(positionCount, hashSize);
+    }
+
     public final int getChannelCount()
     {
         return channelCount;

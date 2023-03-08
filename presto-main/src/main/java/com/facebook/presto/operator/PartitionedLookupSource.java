@@ -151,6 +151,21 @@ public class PartitionedLookupSource
         return encodePartitionedJoinPosition(partition, toIntExact(joinPosition));
     }
 
+    public long getRawHash(int position, Page hashChannelsPage)
+    {
+        return partitionGenerator.getRawHash(hashChannelsPage, position);
+    }
+
+    public int getPartition(long rawHash)
+    {
+        return partitionGenerator.getPartition(rawHash);
+    }
+
+    public long enclodePosition(int partition, long joinPosition)
+    {
+        return encodePartitionedJoinPosition(partition, toIntExact(joinPosition));
+    }
+
     public int getPartitionCount()
     {
         return partitionGenerator.getPartitionCount();

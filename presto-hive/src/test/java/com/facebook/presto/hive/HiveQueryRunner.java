@@ -163,7 +163,7 @@ public final class HiveQueryRunner
 
         DistributedQueryRunner queryRunner =
                 DistributedQueryRunner.builder(createSession(Optional.of(new SelectedRole(ROLE, Optional.of("admin")))))
-                        .setNodeCount(workerCount.orElse(4))
+                        .setNodeCount(workerCount.orElse(1))
 //                        .setNodeCount(workerCount.orElse(1))
                         .setExtraProperties(systemProperties)
                         .setCoordinatorProperties(extraCoordinatorProperties)
@@ -223,19 +223,19 @@ public final class HiveQueryRunner
                 copyTables(queryRunner, "tpch", TINY_SCHEMA_NAME, createBucketedSession(Optional.empty()), tpchTableNames, true, true);
             }
 
-            if (!metastore.getDatabase(METASTORE_CONTEXT, TEMPORARY_TABLE_SCHEMA).isPresent()) {
-                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TEMPORARY_TABLE_SCHEMA));
-            }
-
-            if (!metastore.getDatabase(METASTORE_CONTEXT, TPCDS_SCHEMA).isPresent()) {
-                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TPCDS_SCHEMA));
-                copyTables(queryRunner, "tpcds", TINY_SCHEMA_NAME, createSession(Optional.empty(), TPCDS_SCHEMA), tpcdsTableNames, true, false);
-            }
-
-            if (!metastore.getDatabase(METASTORE_CONTEXT, TPCDS_BUCKETED_SCHEMA).isPresent()) {
-                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TPCDS_BUCKETED_SCHEMA));
-                copyTables(queryRunner, "tpcds", TINY_SCHEMA_NAME, createBucketedSession(Optional.empty(), TPCDS_BUCKETED_SCHEMA), tpcdsTableNames, true, true);
-            }
+//            if (!metastore.getDatabase(METASTORE_CONTEXT, TEMPORARY_TABLE_SCHEMA).isPresent()) {
+//                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TEMPORARY_TABLE_SCHEMA));
+//            }
+//
+//            if (!metastore.getDatabase(METASTORE_CONTEXT, TPCDS_SCHEMA).isPresent()) {
+//                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TPCDS_SCHEMA));
+//                copyTables(queryRunner, "tpcds", TINY_SCHEMA_NAME, createSession(Optional.empty(), TPCDS_SCHEMA), tpcdsTableNames, true, false);
+//            }
+//
+//            if (!metastore.getDatabase(METASTORE_CONTEXT, TPCDS_BUCKETED_SCHEMA).isPresent()) {
+//                metastore.createDatabase(METASTORE_CONTEXT, createDatabaseMetastoreObject(TPCDS_BUCKETED_SCHEMA));
+//                copyTables(queryRunner, "tpcds", TINY_SCHEMA_NAME, createBucketedSession(Optional.empty(), TPCDS_BUCKETED_SCHEMA), tpcdsTableNames, true, true);
+//            }
 
             return queryRunner;
         }

@@ -89,6 +89,37 @@ public class JoinProbe
         return lookupSource.getJoinPosition(position, probePage, page);
     }
 
+    public long[] getCurrentStarJoinPosition(LookupSource lookupSource, StarJoinPageIndex starJoinPageIndex)
+    {
+        if (probeMayHaveNull && currentRowContainsNull()) {
+            return null;
+        }
+        PartitionedLookupSource partitionedLookupSource = (PartitionedLookupSource) lookupSource;
+        long rawHash = -1;
+        if (probeHashBlock != null) {
+            rawHash = BIGINT.getLong(probeHashBlock, position);
+        }
+        else {
+            rawHash = partitionedLookupSource.getRawHash(position, probePage);
+        }
+        int partition = partitionedLookupSource.getPartition(rawHash);
+        // Assume it's array position link, i.e. not sorted on join key
+        int[] positionInPartition = starJoinPageIndex.getAddressIndex(partition, 0, position, probePage, rawHash);
+        if (positionInPartition == null) {
+            return null;
+        }
+        long[] joinPositions = new long[positionInPartition.length];
+        for (int i = 0; i < positionInPartition.length; i++) {
+            if (positionInPartition[i] < 0) {
+                joinPositions[i] = -1;
+            }
+            else {
+                joinPositions[i] = partitionedLookupSource.enclodePosition(partition, positionInPartition[i]);
+            }
+        }
+        return joinPositions;
+    }
+
     public int getPosition()
     {
         return position;

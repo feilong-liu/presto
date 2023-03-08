@@ -260,6 +260,8 @@ public final class SystemSessionProperties
     public static final String STAR_JOIN_ENABLED = "star_join_enabled";
     public static final String STAR_JOIN_LOG_ENABLED = "star_join_log_enabled";
     public static final String STAR_JOIN_PROBE_TYPE = "star_join_probe_type";
+    public static final String STAR_JOIN_HASH_TABLE_SIZE = "star_join_hash_table_size";
+    public static final String DISABLE_JOIN_COMPILER = "disable_join_compiler";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1476,10 +1478,20 @@ public final class SystemSessionProperties
                         "Enable star join",
                         false,
                         false),
+                booleanProperty(
+                        DISABLE_JOIN_COMPILER,
+                        "disable join compiler",
+                        true,
+                        false),
+                integerProperty(
+                        STAR_JOIN_HASH_TABLE_SIZE,
+                        "Size of hash table in star join",
+                        10_000,
+                        false),
                 stringProperty(
                         STAR_JOIN_PROBE_TYPE,
                         "The native engine executable file path for native engine execution",
-                        "list",
+                        "noliststarjoin",
                         false));
     }
 
@@ -2491,6 +2503,16 @@ public final class SystemSessionProperties
     public static boolean isStarJoinLogEnabled(Session session)
     {
         return session.getSystemProperty(STAR_JOIN_LOG_ENABLED, Boolean.class);
+    }
+
+    public static boolean isJoinCompilerDisabled(Session session)
+    {
+        return session.getSystemProperty(DISABLE_JOIN_COMPILER, Boolean.class);
+    }
+
+    public static int getStarJoinHashTableSize(Session session)
+    {
+        return session.getSystemProperty(STAR_JOIN_HASH_TABLE_SIZE, Integer.class);
     }
 
     public static String getStarJoinProbeType(Session session)

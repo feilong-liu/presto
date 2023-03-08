@@ -63,6 +63,7 @@ import com.facebook.presto.operator.FragmentResultCacheManager;
 import com.facebook.presto.operator.GroupIdOperator;
 import com.facebook.presto.operator.HashAggregationOperator.HashAggregationOperatorFactory;
 import com.facebook.presto.operator.HashBuilderOperator.HashBuilderOperatorFactory;
+import com.facebook.presto.operator.HashBuilderStarJoinOperator;
 import com.facebook.presto.operator.HashSemiJoinOperator.HashSemiJoinOperatorFactory;
 import com.facebook.presto.operator.JoinBridgeManager;
 import com.facebook.presto.operator.JoinOperatorFactory;
@@ -96,6 +97,7 @@ import com.facebook.presto.operator.SpatialIndexBuilderOperator.SpatialIndexBuil
 import com.facebook.presto.operator.SpatialIndexBuilderOperator.SpatialPredicate;
 import com.facebook.presto.operator.SpatialJoinOperator.SpatialJoinOperatorFactory;
 import com.facebook.presto.operator.StageExecutionDescriptor;
+import com.facebook.presto.operator.StarJoinPageIndex;
 import com.facebook.presto.operator.StatisticsWriterOperator.StatisticsWriterOperatorFactory;
 import com.facebook.presto.operator.StreamingAggregationOperator.StreamingAggregationOperatorFactory;
 import com.facebook.presto.operator.TableCommitContext;
@@ -255,6 +257,7 @@ import static com.facebook.presto.SystemSessionProperties.getDynamicFilteringRan
 import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMinOutputPageRowCount;
 import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMinOutputPageSize;
 import static com.facebook.presto.SystemSessionProperties.getIndexLoaderTimeout;
+import static com.facebook.presto.SystemSessionProperties.getStarJoinHashTableSize;
 import static com.facebook.presto.SystemSessionProperties.getTaskConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskPartitionedWriterCount;
 import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
@@ -2392,6 +2395,8 @@ public class LocalExecutionPlanner
 
             // Plan build
             ImmutableList.Builder<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactoryBuilder = ImmutableList.builder();
+            StarJoinPageIndex starJoinPageIndex = new StarJoinPageIndex(pagesIndexFactory, buildNodeList.size(), context.getDriverInstanceCount().orElse(1),
+                    getStarJoinHashTableSize(context.getSession()));
             for (int i = 0; i < buildNodeList.size(); ++i) {
                 PlanNode buildNode = buildNodeList.get(i);
                 LocalExecutionPlanContext buildContext = context.createSubContext();
@@ -2406,11 +2411,13 @@ public class LocalExecutionPlanner
 
                 // Plan build, Star join does not support spill for now
                 JoinBridgeManager<PartitionedLookupSourceFactory> lookupSourceFactory =
-                        createStarJoinLookupSourceFactory(node, buildSource, buildContext, ImmutableList.of(buildVariables.get(i)), buildHashVariable.get(i), probeSource, false, context, i);
+                        createStarJoinLookupSourceFactory(node, buildSource, buildContext, ImmutableList.of(buildVariables.get(i)), buildHashVariable.get(i), probeSource,
+                                false, context, i, starJoinPageIndex);
                 lookupSourceFactoryBuilder.add(lookupSourceFactory);
             }
 
-            OperatorFactory operator = createLookupStarJoin(node, probeSource, probeVariables, probeHashVariable, lookupSourceFactoryBuilder.build(), false, context);
+            OperatorFactory operator = createLookupStarJoin(node, probeSource, probeVariables, probeHashVariable, lookupSourceFactoryBuilder.build(), false, context,
+                    starJoinPageIndex);
 
             ImmutableMap.Builder<VariableReferenceExpression, Integer> outputMappings = ImmutableMap.builder();
             List<VariableReferenceExpression> outputVariables = node.getOutputVariables();
@@ -2536,7 +2543,8 @@ public class LocalExecutionPlanner
                 PhysicalOperation probeSource,
                 boolean spillEnabled,
                 LocalExecutionPlanContext context,
-                int index)
+                int index,
+                StarJoinPageIndex starJoinPageIndex)
         {
             PlanNode buildNode = node.getRight().get(index);
             List<VariableReferenceExpression> buildOutputVariables = node.getOutputVariables().stream()
@@ -2610,7 +2618,7 @@ public class LocalExecutionPlanner
             Optional<JoinNode.DistributionType> distributionType = node.getDistributionType();
             boolean isBroadcastJoin = distributionType.isPresent() && distributionType.get() == REPLICATED;
 
-            HashBuilderOperatorFactory hashBuilderOperatorFactory = new HashBuilderOperatorFactory(
+            HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory hashBuilderOperatorFactory = new HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory(
                     buildContext.getNextOperatorId(),
                     node.getId(),
                     lookupSourceFactoryManager,
@@ -2621,10 +2629,11 @@ public class LocalExecutionPlanner
                     sortChannel,
                     searchFunctionFactories,
                     10_000,
-                    pagesIndexFactory,
+                    starJoinPageIndex,
                     spillEnabled && partitionCount > 1,
                     singleStreamSpillerFactory,
-                    isBroadcastJoin);
+                    isBroadcastJoin,
+                    index);
 
             factoriesBuilder.add(hashBuilderOperatorFactory);
 
@@ -2788,7 +2797,8 @@ public class LocalExecutionPlanner
                 Optional<VariableReferenceExpression> probeHashVariable,
                 List<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactoryManager,
                 boolean spillEnabled,
-                LocalExecutionPlanContext context)
+                LocalExecutionPlanContext context,
+                StarJoinPageIndex starJoinPageIndex)
         {
             List<Type> probeTypes = probeSource.getTypes();
             List<VariableReferenceExpression> probeOutputVariables = node.getOutputVariables().stream()
@@ -2802,9 +2812,11 @@ public class LocalExecutionPlanner
 
             switch (node.getType()) {
                 case INNER:
-                    return lookupStarJoinOperators.innerJoin(context.getNextOperatorId(), node.getId(), lookupSourceFactoryManager, probeTypes, probeJoinChannels, probeHashChannel, Optional.of(probeOutputChannels), totalOperatorsCount, partitioningSpillerFactory);
+                    return lookupStarJoinOperators.innerJoin(context.getNextOperatorId(), node.getId(), lookupSourceFactoryManager, probeTypes, probeJoinChannels, probeHashChannel,
+                            Optional.of(probeOutputChannels), totalOperatorsCount, partitioningSpillerFactory, starJoinPageIndex);
                 case LEFT:
-                    return lookupStarJoinOperators.probeOuterJoin(context.getNextOperatorId(), node.getId(), lookupSourceFactoryManager, probeTypes, probeJoinChannels, probeHashChannel, Optional.of(probeOutputChannels), totalOperatorsCount, partitioningSpillerFactory);
+                    return lookupStarJoinOperators.probeOuterJoin(context.getNextOperatorId(), node.getId(), lookupSourceFactoryManager, probeTypes, probeJoinChannels,
+                            probeHashChannel, Optional.of(probeOutputChannels), totalOperatorsCount, partitioningSpillerFactory, starJoinPageIndex);
                 case RIGHT:
                 case FULL:
                 default:

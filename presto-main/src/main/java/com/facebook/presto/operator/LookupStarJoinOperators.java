@@ -34,14 +34,21 @@ public class LookupStarJoinOperators
     {
     }
 
-    public OperatorFactory innerJoin(int operatorId, PlanNodeId planNodeId, List<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactory, List<Type> probeTypes, List<Integer> probeJoinChannel, OptionalInt probeHashChannel, Optional<List<Integer>> probeOutputChannels, OptionalInt totalOperatorsCount, PartitioningSpillerFactory partitioningSpillerFactory)
+    public OperatorFactory innerJoin(int operatorId, PlanNodeId planNodeId, List<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactory, List<Type> probeTypes,
+            List<Integer> probeJoinChannel, OptionalInt probeHashChannel, Optional<List<Integer>> probeOutputChannels, OptionalInt totalOperatorsCount,
+            PartitioningSpillerFactory partitioningSpillerFactory, StarJoinPageIndex starJoinPageIndex)
     {
-        return createStarJoinOperatorFactory(operatorId, planNodeId, lookupSourceFactory, probeTypes, probeJoinChannel, probeHashChannel, probeOutputChannels.orElse(rangeList(probeTypes.size())), LookupJoinOperators.JoinType.INNER, totalOperatorsCount, partitioningSpillerFactory);
+        return createStarJoinOperatorFactory(operatorId, planNodeId, lookupSourceFactory, probeTypes, probeJoinChannel, probeHashChannel,
+                probeOutputChannels.orElse(rangeList(probeTypes.size())), LookupJoinOperators.JoinType.INNER, totalOperatorsCount, partitioningSpillerFactory, starJoinPageIndex);
     }
 
-    public OperatorFactory probeOuterJoin(int operatorId, PlanNodeId planNodeId, List<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactory, List<Type> probeTypes, List<Integer> probeJoinChannel, OptionalInt probeHashChannel, Optional<List<Integer>> probeOutputChannels, OptionalInt totalOperatorsCount, PartitioningSpillerFactory partitioningSpillerFactory)
+    public OperatorFactory probeOuterJoin(int operatorId, PlanNodeId planNodeId, List<JoinBridgeManager<? extends LookupSourceFactory>> lookupSourceFactory, List<Type> probeTypes,
+            List<Integer> probeJoinChannel, OptionalInt probeHashChannel, Optional<List<Integer>> probeOutputChannels, OptionalInt totalOperatorsCount,
+            PartitioningSpillerFactory partitioningSpillerFactory, StarJoinPageIndex starJoinPageIndex)
     {
-        return createStarJoinOperatorFactory(operatorId, planNodeId, lookupSourceFactory, probeTypes, probeJoinChannel, probeHashChannel, probeOutputChannels.orElse(rangeList(probeTypes.size())), LookupJoinOperators.JoinType.PROBE_OUTER, totalOperatorsCount, partitioningSpillerFactory);
+        return createStarJoinOperatorFactory(operatorId, planNodeId, lookupSourceFactory, probeTypes, probeJoinChannel, probeHashChannel,
+                probeOutputChannels.orElse(rangeList(probeTypes.size())), LookupJoinOperators.JoinType.PROBE_OUTER, totalOperatorsCount,
+                partitioningSpillerFactory, starJoinPageIndex);
     }
 
     private static List<Integer> rangeList(int endExclusive)
@@ -61,7 +68,8 @@ public class LookupStarJoinOperators
             List<Integer> probeOutputChannels,
             LookupJoinOperators.JoinType joinType,
             OptionalInt totalOperatorsCount,
-            PartitioningSpillerFactory partitioningSpillerFactory)
+            PartitioningSpillerFactory partitioningSpillerFactory,
+            StarJoinPageIndex starJoinPageIndex)
     {
         List<Type> probeOutputChannelTypes = probeOutputChannels.stream()
                 .map(probeTypes::get)
@@ -82,6 +90,7 @@ public class LookupStarJoinOperators
                 totalOperatorsCount,
                 probeJoinChannel,
                 probeHashChannel,
-                partitioningSpillerFactory);
+                partitioningSpillerFactory,
+                starJoinPageIndex);
     }
 }

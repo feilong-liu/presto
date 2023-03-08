@@ -111,6 +111,7 @@ public class LookupStarJoinOperator
     private Optional<Partition<Supplier<LookupSource>>> currentPartition = Optional.empty();
     @Nullable
     private StarJoinLookupSource starJoinLookupSource;
+    private final StarJoinPageIndex starJoinPageIndex;
 
     public LookupStarJoinOperator(
             OperatorContext operatorContext,
@@ -122,7 +123,8 @@ public class LookupStarJoinOperator
             Runnable afterClose,
             OptionalInt lookupJoinsCount,
             HashGenerator hashGenerator,
-            PartitioningSpillerFactory partitioningSpillerFactory)
+            PartitioningSpillerFactory partitioningSpillerFactory,
+            StarJoinPageIndex starJoinPageIndex)
     {
         this.operatorContext = requireNonNull(operatorContext, "operatorContext is null");
         this.probeTypes = ImmutableList.copyOf(requireNonNull(probeTypes, "probeTypes is null"));
@@ -150,6 +152,7 @@ public class LookupStarJoinOperator
         this.buildPositions = new long[lookupSourceFactory.size()];
         this.buildStarPositions = new long[lookupSourceFactory.size()];
         this.buildCurrentPositions = new long[lookupSourceFactory.size()];
+        this.starJoinPageIndex = starJoinPageIndex;
     }
 
     @Override
@@ -398,6 +401,9 @@ public class LookupStarJoinOperator
         else if (type.equals("nolistcache")) {
             return joinCurrentPositionNoListCache(lookupSource, probeOuter, yieldSignal);
         }
+        else if (type.equals("noliststarjoin")) {
+            return joinCurrentPositionNoListStarJoin(lookupSource, probeOuter, yieldSignal);
+        }
         else {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "does not support in starjoin");
         }
@@ -578,6 +584,87 @@ public class LookupStarJoinOperator
             for (int i = 0; i < lookupSource.size(); ++i) {
                 LookupSource source = lookupSource.get(i);
                 long position = probe.getCurrentJoinPosition(source);
+                while (position >= 0) {
+                    if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
+                        break;
+                    }
+                    position = source.getNextJoinPosition(position, probe.getPosition(), probe.getPage());
+                }
+                // If probe not in outer side, and no match found, the star join will not produce output at all, return true
+                if (!probeOuter && position == -1) {
+                    return true;
+                }
+                buildStarPositions[i] = position;
+                buildCurrentPositions[i] = position;
+            }
+        }
+        while (true) {
+            ++joinSourcePositions;
+            pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
+            // Now advance the build row position
+            boolean hasOutput = true;
+            for (int i = buildCurrentPositions.length - 1; i >= 0; --i) {
+                if (buildCurrentPositions[i] == -1) {
+                    if (i == 0) {
+                        hasOutput = false;
+                        break;
+                    }
+                }
+                else {
+                    // find next match position
+                    long nextPosition = lookupSource.get(i).getNextJoinPosition(buildCurrentPositions[i], probe.getPosition(), probe.getPage());
+                    while (nextPosition >= 0) {
+                        if (lookupSource.get(i).isJoinPositionEligible(nextPosition, probe.getPosition(), probe.getPage())) {
+                            break;
+                        }
+                        nextPosition = lookupSource.get(i).getNextJoinPosition(nextPosition, probe.getPosition(), probe.getPage());
+                    }
+                    if (nextPosition != -1) {
+                        buildCurrentPositions[i] = nextPosition;
+                        break;
+                    }
+                    else {
+                        if (i == 0) {
+                            hasOutput = false;
+                            break;
+                        }
+                        else {
+                            buildCurrentPositions[i] = buildStarPositions[i];
+                        }
+                    }
+                }
+            }
+            if (!hasOutput) {
+                break;
+            }
+            if (yieldSignal.isSet() || tryBuildPage()) {
+                return false;
+            }
+        }
+        joinPositionBlockListHasData = false;
+        return true;
+    }
+
+    private boolean joinCurrentPositionNoListStarJoin(List<LookupSource> lookupSource, boolean probeOuter, DriverYieldSignal yieldSignal)
+    {
+        if (buildOutputOffsets == null || buildOutputOffsets.isEmpty()) {
+            for (int i = 0; i < lookupSource.size(); ++i) {
+                if (i == 0) {
+                    buildOutputOffsets.add(0);
+                }
+                else {
+                    buildOutputOffsets.add(buildOutputOffsets.get(i - 1) + lookupSource.get(i - 1).getChannelCount());
+                }
+            }
+        }
+        if (!joinPositionBlockListHasData) {
+            long[] positions = probe.getCurrentStarJoinPosition(lookupSource.get(0), starJoinPageIndex);
+            for (int i = 0; i < lookupSource.size(); ++i) {
+                LookupSource source = lookupSource.get(i);
+                long position = -1;
+                if (positions != null) {
+                    position = positions[i];
+                }
                 while (position >= 0) {
                     if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
                         break;

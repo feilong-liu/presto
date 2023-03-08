@@ -75,6 +75,44 @@ public class JoinHashSupplier
         this.positionLinks = positionLinksFactoryBuilder.isEmpty() ? Optional.empty() : Optional.of(positionLinksFactoryBuilder.build());
     }
 
+    public JoinHashSupplier(
+            Session session,
+            PagesHashStrategy pagesHashStrategy,
+            AdaptiveLongBigArray addresses,
+            int positionCount,
+            List<List<Block>> channels,
+            Optional<JoinFilterFunctionFactory> filterFunctionFactory,
+            Optional<Integer> sortChannel,
+            List<JoinFilterFunctionFactory> searchFunctionFactories,
+            StarJoinPageIndex starJoinPageIndex,
+            int table,
+            int partition)
+    {
+        this.session = requireNonNull(session, "session is null");
+        this.addresses = requireNonNull(addresses, "addresses is null");
+        this.filterFunctionFactory = requireNonNull(filterFunctionFactory, "filterFunctionFactory is null");
+        this.searchFunctionFactories = ImmutableList.copyOf(searchFunctionFactories);
+        requireNonNull(channels, "pages is null");
+        requireNonNull(pagesHashStrategy, "pagesHashStrategy is null");
+
+        PositionLinks.FactoryBuilder positionLinksFactoryBuilder;
+        if (sortChannel.isPresent() &&
+                isFastInequalityJoin(session)) {
+            checkArgument(filterFunctionFactory.isPresent(), "filterFunctionFactory not set while sortChannel set");
+            positionLinksFactoryBuilder = SortedPositionLinks.builder(
+                    positionCount,
+                    pagesHashStrategy,
+                    addresses);
+        }
+        else {
+            positionLinksFactoryBuilder = ArrayPositionLinks.builder(positionCount);
+        }
+
+        this.pages = channelsToPages(channels);
+        this.pagesHash = new PagesHash(addresses, positionCount, pagesHashStrategy, positionLinksFactoryBuilder, starJoinPageIndex, partition, table);
+        this.positionLinks = positionLinksFactoryBuilder.isEmpty() ? Optional.empty() : Optional.of(positionLinksFactoryBuilder.build());
+    }
+
     @Override
     public long getHashCollisions()
     {

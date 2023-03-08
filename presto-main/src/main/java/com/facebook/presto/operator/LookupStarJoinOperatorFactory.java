@@ -43,6 +43,7 @@ public class LookupStarJoinOperatorFactory
     private final OptionalInt totalOperatorsCount;
     private final HashGenerator probeHashGenerator;
     private final PartitioningSpillerFactory partitioningSpillerFactory;
+    private final StarJoinPageIndex starJoinPageIndex;
 
     private boolean closed;
 
@@ -58,7 +59,8 @@ public class LookupStarJoinOperatorFactory
             OptionalInt totalOperatorsCount,
             List<Integer> probeJoinChannels,
             OptionalInt probeHashChannel,
-            PartitioningSpillerFactory partitioningSpillerFactory)
+            PartitioningSpillerFactory partitioningSpillerFactory,
+            StarJoinPageIndex starJoinPageIndex)
     {
         this.operatorId = operatorId;
         this.planNodeId = requireNonNull(planNodeId, "planNodeId is null");
@@ -87,6 +89,7 @@ public class LookupStarJoinOperatorFactory
         }
 
         this.partitioningSpillerFactory = requireNonNull(partitioningSpillerFactory, "partitioningSpillerFactory is null");
+        this.starJoinPageIndex = starJoinPageIndex;
     }
 
     private LookupStarJoinOperatorFactory(LookupStarJoinOperatorFactory other)
@@ -105,6 +108,7 @@ public class LookupStarJoinOperatorFactory
         totalOperatorsCount = other.totalOperatorsCount;
         probeHashGenerator = other.probeHashGenerator;
         partitioningSpillerFactory = other.partitioningSpillerFactory;
+        starJoinPageIndex = other.starJoinPageIndex;
 
         closed = false;
         joinBridgeManager.forEach(JoinBridgeManager::incrementProbeFactoryCount);
@@ -136,7 +140,8 @@ public class LookupStarJoinOperatorFactory
                 () -> joinBridgeManager.forEach(x -> x.probeOperatorClosed(driverContext.getLifespan())),
                 totalOperatorsCount,
                 probeHashGenerator,
-                partitioningSpillerFactory);
+                partitioningSpillerFactory,
+                starJoinPageIndex);
     }
 
     @Override

@@ -30,7 +30,6 @@ import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.operator.SpatialIndexBuilderOperator.SpatialPredicate;
 import com.facebook.presto.sql.analyzer.FeaturesConfig;
 import com.facebook.presto.sql.gen.JoinCompiler;
-import com.facebook.presto.sql.gen.JoinCompiler.LookupSourceSupplierFactory;
 import com.facebook.presto.sql.gen.JoinFilterFunctionCompiler.JoinFilterFunctionFactory;
 import com.facebook.presto.sql.gen.OrderingCompiler;
 import com.google.common.collect.AbstractIterator;
@@ -54,6 +53,7 @@ import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.facebook.presto.SystemSessionProperties.isJoinCompilerDisabled;
 import static com.facebook.presto.operator.SyntheticAddress.decodePosition;
 import static com.facebook.presto.operator.SyntheticAddress.decodeSliceIndex;
 import static com.facebook.presto.operator.SyntheticAddress.encodeSyntheticAddress;
@@ -487,13 +487,13 @@ public class PagesIndex
             Optional<List<Integer>> outputChannels)
     {
         List<List<Block>> channels = ImmutableList.copyOf(this.channels);
-        if (!joinChannels.isEmpty()) {
+        if (!joinChannels.isEmpty() && !isJoinCompilerDisabled(session)) {
             // todo compiled implementation of lookup join does not support when we are joining with empty join channels.
             // This code path will trigger only for OUTER joins. To fix that we need to add support for
             //        OUTER joins into NestedLoopsJoin and remove "type == INNER" condition in LocalExecutionPlanner.visitJoin()
 
             try {
-                LookupSourceSupplierFactory lookupSourceFactory = joinCompiler.compileLookupSourceFactory(types, joinChannels, sortChannel, outputChannels);
+                JoinCompiler.LookupSourceSupplierFactory lookupSourceFactory = joinCompiler.compileLookupSourceFactory(types, joinChannels, sortChannel, outputChannels);
                 return lookupSourceFactory.createLookupSourceSupplier(
                         session,
                         valueAddresses,
@@ -529,6 +529,49 @@ public class PagesIndex
                 filterFunctionFactory,
                 sortChannel,
                 searchFunctionFactories);
+    }
+
+    public LookupSourceSupplier createLookupSourceSupplier(
+            Session session,
+            List<Integer> joinChannels,
+            OptionalInt hashChannel,
+            Optional<JoinFilterFunctionFactory> filterFunctionFactory,
+            Optional<Integer> sortChannel,
+            List<JoinFilterFunctionFactory> searchFunctionFactories,
+            Optional<List<Integer>> outputChannels,
+            StarJoinPageIndex starJoinPageIndex,
+            int table,
+            int partition)
+    {
+        List<List<Block>> channels = ImmutableList.copyOf(this.channels);
+
+        // if compilation fails
+        PagesHashStrategy hashStrategy = new SimplePagesHashStrategy(
+                types,
+                outputChannels.orElse(rangeList(types.size())),
+                channels,
+                joinChannels,
+                hashChannel,
+                sortChannel,
+                functionAndTypeManager,
+                groupByUsesEqualTo);
+
+        starJoinPageIndex.setPagesHashStrategy(partition, table, hashStrategy);
+        starJoinPageIndex.setHashChannels(partition, table, joinChannels);
+        starJoinPageIndex.setChannels(partition, table, channels);
+
+        return new JoinHashSupplier(
+                session,
+                hashStrategy,
+                valueAddresses,
+                positionCount,
+                channels,
+                filterFunctionFactory,
+                sortChannel,
+                searchFunctionFactories,
+                starJoinPageIndex,
+                table,
+                partition);
     }
 
     private List<Integer> rangeList(int endExclusive)
