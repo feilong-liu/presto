@@ -565,7 +565,15 @@ public class AddExchanges
                         gatheringExchange(
                                 idAllocator.getNextId(),
                                 REMOTE_STREAMING,
-                                new DistinctLimitNode(child.getNode().getSourceLocation(), idAllocator.getNextId(), child.getNode(), node.getLimit(), true, node.getDistinctVariables(), node.getHashVariable(), node.getTimeoutMillis())),
+                                new DistinctLimitNode(
+                                        child.getNode().getSourceLocation(),
+                                        idAllocator.getNextId(),
+                                        node.getTimeoutMillis() > 0 ? roundRobinExchange(idAllocator.getNextId(), REMOTE_STREAMING, child.getNode()) : child.getNode(),
+                                        node.getLimit(),
+                                        true,
+                                        node.getDistinctVariables(),
+                                        node.getHashVariable(),
+                                        node.getTimeoutMillis())),
                         child.getProperties());
             }
 

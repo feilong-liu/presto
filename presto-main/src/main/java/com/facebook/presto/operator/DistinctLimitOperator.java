@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.memory.context.LocalMemoryContext;
@@ -22,6 +23,7 @@ import com.facebook.presto.sql.gen.JoinCompiler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.Ints;
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.Arrays;
 import java.util.List;
@@ -111,6 +113,7 @@ public class DistinctLimitOperator
         }
     }
 
+    private static final Logger log = Logger.get(DistinctLimitOperator.class);
     private final OperatorContext operatorContext;
     private final LocalMemoryContext localUserMemoryContext;
 
@@ -164,6 +167,7 @@ public class DistinctLimitOperator
     private boolean finishIfTimedOut()
     {
         if (timeoutMillis > 0 && System.currentTimeMillis() >= timeoutMillis) {
+            log.info("PlanNodeId " + operatorContext.getPlanNodeId() + " operatorId " + operatorContext.getOperatorId() + " timeoutMillios " + timeoutMillis + " timeout");
             finish();
             return true;
         }
@@ -190,14 +194,23 @@ public class DistinctLimitOperator
     }
 
     @Override
+    public ListenableFuture<?> isBlocked()
+    {
+        log.info("PlanNodeId " + operatorContext.getPlanNodeId() + " operatorId " + operatorContext.getOperatorId() + " check isBlocked");
+        return NOT_BLOCKED;
+    }
+
+    @Override
     public boolean needsInput()
     {
+        log.info("PlanNodeId " + operatorContext.getPlanNodeId() + " operatorId " + operatorContext.getOperatorId() + " check needsInput");
         return !finishIfTimedOut() && !finishing && remainingLimit > 0 && !hasUnfinishedInput();
     }
 
     @Override
     public void addInput(Page page)
     {
+        log.info("PlanNodeId " + operatorContext.getPlanNodeId() + " operatorId " + operatorContext.getOperatorId() + " check addInput");
         if (finishIfTimedOut()) {
             return;
         }

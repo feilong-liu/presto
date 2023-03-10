@@ -607,7 +607,7 @@ public class PlanPrinter
         {
             addNode(node,
                     format("DistinctLimit%s", node.isPartial() ? "Partial" : ""),
-                    format("[%s]%s", node.getLimit(), formatHash(node.getHashVariable())));
+                    format("[%s][timeout:%s]%s", node.getLimit(), node.getTimeoutMillis(), formatHash(node.getHashVariable())));
             return processChildren(node, context);
         }
 
