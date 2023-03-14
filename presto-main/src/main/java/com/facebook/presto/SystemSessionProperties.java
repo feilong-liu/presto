@@ -262,6 +262,8 @@ public final class SystemSessionProperties
     public static final String STAR_JOIN_PROBE_TYPE = "star_join_probe_type";
     public static final String STAR_JOIN_HASH_TABLE_SIZE = "star_join_hash_table_size";
     public static final String DISABLE_JOIN_COMPILER = "disable_join_compiler";
+    public static final String SKIP_STARJOIN_PROBE_ENTIRELY = "skip_starjoin_probe_entirely";
+    public static final String SKIP_STARJOIN_PROBE_FOR_DUPLICATE = "skip_starjoin_probe_for_duplicate";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1483,6 +1485,16 @@ public final class SystemSessionProperties
                         "disable join compiler",
                         true,
                         false),
+                booleanProperty(
+                        SKIP_STARJOIN_PROBE_ENTIRELY,
+                        "disable join compiler",
+                        false,
+                        false),
+                booleanProperty(
+                        SKIP_STARJOIN_PROBE_FOR_DUPLICATE,
+                        "disable join compiler",
+                        false,
+                        false),
                 integerProperty(
                         STAR_JOIN_HASH_TABLE_SIZE,
                         "Size of hash table in star join",
@@ -2508,6 +2520,16 @@ public final class SystemSessionProperties
     public static boolean isJoinCompilerDisabled(Session session)
     {
         return session.getSystemProperty(DISABLE_JOIN_COMPILER, Boolean.class);
+    }
+
+    public static boolean skipStarjoinProbeEntirely(Session session)
+    {
+        return session.getSystemProperty(SKIP_STARJOIN_PROBE_ENTIRELY, Boolean.class);
+    }
+
+    public static boolean skipStarjoinProbeForDuplicate(Session session)
+    {
+        return session.getSystemProperty(SKIP_STARJOIN_PROBE_FOR_DUPLICATE, Boolean.class);
     }
 
     public static int getStarJoinHashTableSize(Session session)

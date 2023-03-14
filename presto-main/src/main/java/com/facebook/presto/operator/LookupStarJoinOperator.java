@@ -34,6 +34,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -49,6 +50,8 @@ import java.util.stream.IntStream;
 import static com.facebook.airlift.concurrent.MoreFutures.addSuccessCallback;
 import static com.facebook.airlift.concurrent.MoreFutures.getDone;
 import static com.facebook.presto.SystemSessionProperties.getStarJoinProbeType;
+import static com.facebook.presto.SystemSessionProperties.skipStarjoinProbeEntirely;
+import static com.facebook.presto.SystemSessionProperties.skipStarjoinProbeForDuplicate;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.operator.SpillingUtils.checkSpillSucceeded;
 import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
@@ -112,6 +115,8 @@ public class LookupStarJoinOperator
     @Nullable
     private StarJoinLookupSource starJoinLookupSource;
     private final StarJoinPageIndex starJoinPageIndex;
+    private final boolean skipProbeEntirely;
+    private final boolean skipProbeForDuplicate;
 
     public LookupStarJoinOperator(
             OperatorContext operatorContext,
@@ -153,6 +158,8 @@ public class LookupStarJoinOperator
         this.buildStarPositions = new long[lookupSourceFactory.size()];
         this.buildCurrentPositions = new long[lookupSourceFactory.size()];
         this.starJoinPageIndex = starJoinPageIndex;
+        this.skipProbeForDuplicate = skipStarjoinProbeForDuplicate(operatorContext.getSession());
+        this.skipProbeEntirely = skipStarjoinProbeEntirely(operatorContext.getSession());
     }
 
     @Override
@@ -658,30 +665,39 @@ public class LookupStarJoinOperator
             }
         }
         if (!joinPositionBlockListHasData) {
-            long[] positions = probe.getCurrentStarJoinPosition(lookupSource.get(0), starJoinPageIndex);
-            for (int i = 0; i < lookupSource.size(); ++i) {
-                LookupSource source = lookupSource.get(i);
-                long position = -1;
-                if (positions != null) {
-                    position = positions[i];
-                }
-                while (position >= 0) {
-                    if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
-                        break;
+            if (skipProbeEntirely) {
+                Arrays.fill(buildStarPositions, -1);
+                Arrays.fill(buildCurrentPositions, -1);
+            }
+            else {
+                long[] positions = probe.getCurrentStarJoinPosition(lookupSource.get(0), starJoinPageIndex);
+                for (int i = 0; i < lookupSource.size(); ++i) {
+                    LookupSource source = lookupSource.get(i);
+                    long position = -1;
+                    if (positions != null) {
+                        position = positions[i];
                     }
-                    position = source.getNextJoinPosition(position, probe.getPosition(), probe.getPage());
+                    while (position >= 0) {
+                        if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
+                            break;
+                        }
+                        position = source.getNextJoinPosition(position, probe.getPosition(), probe.getPage());
+                    }
+                    // If probe not in outer side, and no match found, the star join will not produce output at all, return true
+                    if (!probeOuter && position == -1) {
+                        return true;
+                    }
+                    buildStarPositions[i] = position;
+                    buildCurrentPositions[i] = position;
                 }
-                // If probe not in outer side, and no match found, the star join will not produce output at all, return true
-                if (!probeOuter && position == -1) {
-                    return true;
-                }
-                buildStarPositions[i] = position;
-                buildCurrentPositions[i] = position;
             }
         }
         while (true) {
             ++joinSourcePositions;
             pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
+            if (skipProbeEntirely || skipProbeForDuplicate) {
+                break;
+            }
             // Now advance the build row position
             boolean hasOutput = true;
             for (int i = buildCurrentPositions.length - 1; i >= 0; --i) {
