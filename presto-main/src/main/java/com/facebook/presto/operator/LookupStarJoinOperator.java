@@ -668,6 +668,8 @@ public class LookupStarJoinOperator
             if (skipProbeEntirely) {
                 Arrays.fill(buildStarPositions, -1);
                 Arrays.fill(buildCurrentPositions, -1);
+                ++joinSourcePositions;
+                pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
             }
             else {
                 long[] positions = probe.getCurrentStarJoinPosition(lookupSource.get(0), starJoinPageIndex);
@@ -690,14 +692,15 @@ public class LookupStarJoinOperator
                     buildStarPositions[i] = position;
                     buildCurrentPositions[i] = position;
                 }
+                if (skipProbeForDuplicate) {
+                    ++joinSourcePositions;
+                    pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
+                }
             }
         }
-        while (true) {
+        while (true && !skipProbeForDuplicate && !skipProbeEntirely) {
             ++joinSourcePositions;
             pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
-            if (skipProbeEntirely || skipProbeForDuplicate) {
-                break;
-            }
             // Now advance the build row position
             boolean hasOutput = true;
             for (int i = buildCurrentPositions.length - 1; i >= 0; --i) {
