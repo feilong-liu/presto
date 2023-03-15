@@ -258,6 +258,7 @@ import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMin
 import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMinOutputPageSize;
 import static com.facebook.presto.SystemSessionProperties.getIndexLoaderTimeout;
 import static com.facebook.presto.SystemSessionProperties.getStarJoinHashTableSize;
+import static com.facebook.presto.SystemSessionProperties.getStarJoinProbeType;
 import static com.facebook.presto.SystemSessionProperties.getTaskConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskPartitionedWriterCount;
 import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
@@ -2498,8 +2499,8 @@ public class LocalExecutionPlanner
             ImmutableList.Builder<OperatorFactory> factoriesBuilder = new ImmutableList.Builder<>();
             factoriesBuilder.addAll(buildSource.getOperatorFactories());
 
-            createDynamicFilter(buildSource, node, context, partitionCount).ifPresent(
-                    filter -> factoriesBuilder.add(createDynamicFilterSourceOperatorFactory(filter, node.getId(), buildSource, buildContext)));
+//            createDynamicFilter(buildSource, node, context, partitionCount).ifPresent(
+//                    filter -> factoriesBuilder.add(createDynamicFilterSourceOperatorFactory(filter, node.getId(), buildSource, buildContext)));
 
             // Determine if planning broadcast join
             Optional<JoinNode.DistributionType> distributionType = node.getDistributionType();
@@ -2618,24 +2619,44 @@ public class LocalExecutionPlanner
             Optional<JoinNode.DistributionType> distributionType = node.getDistributionType();
             boolean isBroadcastJoin = distributionType.isPresent() && distributionType.get() == REPLICATED;
 
-            HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory hashBuilderOperatorFactory = new HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory(
-                    buildContext.getNextOperatorId(),
-                    node.getId(),
-                    lookupSourceFactoryManager,
-                    buildOutputChannels,
-                    buildChannels,
-                    buildHashChannel,
-                    filterFunctionFactory,
-                    sortChannel,
-                    searchFunctionFactories,
-                    10_000,
-                    starJoinPageIndex,
-                    spillEnabled && partitionCount > 1,
-                    singleStreamSpillerFactory,
-                    isBroadcastJoin,
-                    index);
-
-            factoriesBuilder.add(hashBuilderOperatorFactory);
+            if (getStarJoinProbeType(context.getSession()).equals("noliststarjoin")) {
+                HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory hashBuilderOperatorFactory =
+                        new HashBuilderStarJoinOperator.HashBuilderStarJoinOperatorFactory(
+                                buildContext.getNextOperatorId(),
+                                node.getId(),
+                                lookupSourceFactoryManager,
+                                buildOutputChannels,
+                                buildChannels,
+                                buildHashChannel,
+                                filterFunctionFactory,
+                                sortChannel,
+                                searchFunctionFactories,
+                                10_000,
+                                starJoinPageIndex,
+                                spillEnabled && partitionCount > 1,
+                                singleStreamSpillerFactory,
+                                isBroadcastJoin,
+                                index);
+                factoriesBuilder.add(hashBuilderOperatorFactory);
+            }
+            else {
+                HashBuilderOperatorFactory hashBuilderOperatorFactory = new HashBuilderOperatorFactory(
+                        buildContext.getNextOperatorId(),
+                        node.getId(),
+                        lookupSourceFactoryManager,
+                        buildOutputChannels,
+                        buildChannels,
+                        buildHashChannel,
+                        filterFunctionFactory,
+                        sortChannel,
+                        searchFunctionFactories,
+                        10_000,
+                        pagesIndexFactory,
+                        spillEnabled && partitionCount > 1,
+                        singleStreamSpillerFactory,
+                        isBroadcastJoin);
+                factoriesBuilder.add(hashBuilderOperatorFactory);
+            }
 
             context.addDriverFactory(
                     buildContext.isInputDriver(),

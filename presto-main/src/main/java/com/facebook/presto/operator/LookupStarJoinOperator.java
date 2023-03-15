@@ -588,24 +588,36 @@ public class LookupStarJoinOperator
             }
         }
         if (!joinPositionBlockListHasData) {
-            for (int i = 0; i < lookupSource.size(); ++i) {
-                LookupSource source = lookupSource.get(i);
-                long position = probe.getCurrentJoinPosition(source);
-                while (position >= 0) {
-                    if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
-                        break;
+            if (skipProbeEntirely) {
+                Arrays.fill(buildStarPositions, -1);
+                Arrays.fill(buildCurrentPositions, -1);
+                ++joinSourcePositions;
+                pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
+            }
+            else {
+                for (int i = 0; i < lookupSource.size(); ++i) {
+                    LookupSource source = lookupSource.get(i);
+                    long position = probe.getCurrentJoinPosition(source);
+                    while (position >= 0) {
+                        if (source.isJoinPositionEligible(position, probe.getPosition(), probe.getPage())) {
+                            break;
+                        }
+                        position = source.getNextJoinPosition(position, probe.getPosition(), probe.getPage());
                     }
-                    position = source.getNextJoinPosition(position, probe.getPosition(), probe.getPage());
+                    // If probe not in outer side, and no match found, the star join will not produce output at all, return true
+                    if (!probeOuter && position == -1) {
+                        return true;
+                    }
+                    buildStarPositions[i] = position;
+                    buildCurrentPositions[i] = position;
                 }
-                // If probe not in outer side, and no match found, the star join will not produce output at all, return true
-                if (!probeOuter && position == -1) {
-                    return true;
+                if (skipProbeForDuplicate) {
+                    ++joinSourcePositions;
+                    pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
                 }
-                buildStarPositions[i] = position;
-                buildCurrentPositions[i] = position;
             }
         }
-        while (true) {
+        while (true && !skipProbeForDuplicate && !skipProbeEntirely) {
             ++joinSourcePositions;
             pageBuilder.appendRow(probe, lookupSource, buildCurrentPositions, buildOutputOffsets);
             // Now advance the build row position
