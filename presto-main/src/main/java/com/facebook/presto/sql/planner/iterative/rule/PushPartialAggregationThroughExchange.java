@@ -19,15 +19,12 @@ import com.facebook.presto.matching.Capture;
 import com.facebook.presto.matching.Captures;
 import com.facebook.presto.matching.Pattern;
 import com.facebook.presto.metadata.FunctionAndTypeManager;
-import com.facebook.presto.spi.function.FunctionHandle;
-import com.facebook.presto.spi.function.JavaAggregationFunctionImplementation;
 import com.facebook.presto.spi.plan.AggregationNode;
 import com.facebook.presto.spi.plan.Assignments;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.ProjectNode;
-import com.facebook.presto.spi.relation.CallExpression;
-import com.facebook.presto.spi.relation.LambdaDefinitionExpression;
 import com.facebook.presto.spi.relation.RowExpression;
+import com.facebook.presto.spi.relation.SpecialFormExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.sql.analyzer.FeaturesConfig.PartialAggregationStrategy;
 import com.facebook.presto.sql.planner.PartitioningScheme;
@@ -35,6 +32,7 @@ import com.facebook.presto.sql.planner.iterative.Rule;
 import com.facebook.presto.sql.planner.optimizations.SymbolMapper;
 import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,10 +40,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.getPartialAggregationByteReductionThreshold;
 import static com.facebook.presto.SystemSessionProperties.getPartialAggregationStrategy;
+import static com.facebook.presto.SystemSessionProperties.isMergeAggregationsWithAndWithoutFilter;
 import static com.facebook.presto.SystemSessionProperties.isStreamingForPartialAggregationEnabled;
 import static com.facebook.presto.operator.aggregation.AggregationUtils.isDecomposable;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.FINAL;
@@ -54,15 +54,24 @@ import static com.facebook.presto.spi.plan.AggregationNode.Step.SINGLE;
 import static com.facebook.presto.spi.plan.ProjectNode.Locality.LOCAL;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.PartialAggregationStrategy.AUTOMATIC;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.PartialAggregationStrategy.NEVER;
+import static com.facebook.presto.sql.planner.PlannerUtils.addProjections;
+import static com.facebook.presto.sql.planner.PlannerUtils.getFinalAggregation;
+import static com.facebook.presto.sql.planner.PlannerUtils.getIntermediateAggregation;
+import static com.facebook.presto.sql.planner.PlannerUtils.getVariableForIntermediateAggregation;
+import static com.facebook.presto.sql.planner.PlannerUtils.removeFilterAndMask;
 import static com.facebook.presto.sql.planner.plan.ExchangeNode.Type.GATHER;
 import static com.facebook.presto.sql.planner.plan.ExchangeNode.Type.REPARTITION;
 import static com.facebook.presto.sql.planner.plan.Patterns.aggregation;
 import static com.facebook.presto.sql.planner.plan.Patterns.exchange;
 import static com.facebook.presto.sql.planner.plan.Patterns.source;
+import static com.facebook.presto.sql.relational.Expressions.constantNull;
+import static com.facebook.presto.sql.relational.Expressions.specialForm;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
-import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static java.util.Objects.requireNonNull;
+import static java.util.function.Function.identity;
 
 public class PushPartialAggregationThroughExchange
         implements Rule<AggregationNode>
@@ -92,7 +101,6 @@ public class PushPartialAggregationThroughExchange
     public Result apply(AggregationNode aggregationNode, Captures captures, Context context)
     {
         ExchangeNode exchangeNode = captures.get(EXCHANGE_NODE);
-
         boolean decomposable = isDecomposable(aggregationNode, functionAndTypeManager);
 
         if (aggregationNode.getStep().equals(SINGLE) &&
@@ -211,48 +219,24 @@ public class PushPartialAggregationThroughExchange
 
     private PlanNode split(AggregationNode node, Context context)
     {
+        if (isMergeAggregationsWithAndWithoutFilter(context.getSession())) {
+            if (!node.getGroupingKeys().isEmpty() &&
+                    node.getAggregations().values().stream().map(x -> functionAndTypeManager.getFunctionMetadata(x.getFunctionHandle())).noneMatch(x -> x.isCalledOnNullInput())) {
+                return mergeAggsWithAndWithoutFilter(node, context);
+            }
+        }
         // otherwise, add a partial and final with an exchange in between
         Map<VariableReferenceExpression, AggregationNode.Aggregation> intermediateAggregation = new HashMap<>();
         Map<VariableReferenceExpression, AggregationNode.Aggregation> finalAggregation = new HashMap<>();
         for (Map.Entry<VariableReferenceExpression, AggregationNode.Aggregation> entry : node.getAggregations().entrySet()) {
             AggregationNode.Aggregation originalAggregation = entry.getValue();
-            String functionName = functionAndTypeManager.getFunctionMetadata(originalAggregation.getFunctionHandle()).getName().getObjectName();
-            FunctionHandle functionHandle = originalAggregation.getFunctionHandle();
-            JavaAggregationFunctionImplementation function = functionAndTypeManager.getJavaAggregateFunctionImplementation(functionHandle);
-            VariableReferenceExpression intermediateVariable = context.getVariableAllocator().newVariable(entry.getValue().getCall().getSourceLocation(), functionName, function.getIntermediateType());
+            VariableReferenceExpression intermediateVariable = getVariableForIntermediateAggregation(originalAggregation, functionAndTypeManager, context.getVariableAllocator());
 
             checkState(!originalAggregation.getOrderBy().isPresent(), "Aggregate with ORDER BY does not support partial aggregation");
-            intermediateAggregation.put(intermediateVariable, new AggregationNode.Aggregation(
-                    new CallExpression(
-                            originalAggregation.getCall().getSourceLocation(),
-                            functionName,
-                            functionHandle,
-                            function.getIntermediateType(),
-                            originalAggregation.getArguments()),
-                    originalAggregation.getFilter(),
-                    originalAggregation.getOrderBy(),
-                    originalAggregation.isDistinct(),
-                    originalAggregation.getMask()));
+            intermediateAggregation.put(intermediateVariable, getIntermediateAggregation(originalAggregation, functionAndTypeManager));
 
             // rewrite final aggregation in terms of intermediate function
-            finalAggregation.put(entry.getKey(),
-                    new AggregationNode.Aggregation(
-                            new CallExpression(
-                                    originalAggregation.getCall().getSourceLocation(),
-                                    functionName,
-                                    functionHandle,
-                                    function.getFinalType(),
-                                    ImmutableList.<RowExpression>builder()
-                                            .add(intermediateVariable)
-                                            .addAll(originalAggregation.getArguments()
-                                                    .stream()
-                                                    .filter(PushPartialAggregationThroughExchange::isLambda)
-                                                    .collect(toImmutableList()))
-                                            .build()),
-                            Optional.empty(),
-                            Optional.empty(),
-                            false,
-                            Optional.empty()));
+            finalAggregation.put(entry.getKey(), getFinalAggregation(originalAggregation, functionAndTypeManager, intermediateVariable));
         }
 
         // We can always enable streaming aggregation for partial aggregations. But if the table is not pre-group by the groupby columns, it may have regressions.
@@ -290,6 +274,115 @@ public class PushPartialAggregationThroughExchange
                 node.getGroupIdVariable());
     }
 
+    private PlanNode mergeAggsWithAndWithoutFilter(AggregationNode node, Context context)
+    {
+        checkState(node.getAggregations().values().stream().noneMatch(x -> x.getFilter().isPresent()),
+                "All aggregation filters should already be rewritten to mask before this optimization rule");
+
+        Set<AggregationNode.Aggregation> aggregationsWithoutMask = node.getAggregations().values().stream().filter(x -> !x.getMask().isPresent()).collect(toImmutableSet());
+        Map<AggregationNode.Aggregation, AggregationNode.Aggregation> aggregationsToCombine = node.getAggregations().values().stream()
+                .filter(x -> x.getMask().isPresent() && aggregationsWithoutMask.contains(removeFilterAndMask(x)))
+                .collect(toImmutableMap(identity(), x -> removeFilterAndMask(x)));
+        Set<AggregationNode.Aggregation> aggregationsForPartialAgg = node.getAggregations().values().stream()
+                .filter(x -> !aggregationsToCombine.containsKey(x)).collect(Collectors.toSet());
+
+        ImmutableMap.Builder<VariableReferenceExpression, AggregationNode.Aggregation> intermediateAggregationBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<VariableReferenceExpression, AggregationNode.Aggregation> finalAggregationBuilder = ImmutableMap.builder();
+
+        ImmutableMap.Builder<AggregationNode.Aggregation, VariableReferenceExpression> intermediateVariablesForAggregationBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<AggregationNode.Aggregation, VariableReferenceExpression> maskVariablesBuilder = ImmutableMap.builder();
+        for (Map.Entry<VariableReferenceExpression, AggregationNode.Aggregation> entry : node.getAggregations().entrySet()) {
+            AggregationNode.Aggregation originalAggregation = entry.getValue();
+            if (aggregationsForPartialAgg.contains(originalAggregation)) {
+                checkState(!originalAggregation.getOrderBy().isPresent(), "Aggregate with ORDER BY does not support partial aggregation");
+                VariableReferenceExpression intermediateVariable = getVariableForIntermediateAggregation(originalAggregation, functionAndTypeManager, context.getVariableAllocator());
+                intermediateAggregationBuilder.put(intermediateVariable, getIntermediateAggregation(originalAggregation, functionAndTypeManager));
+                intermediateVariablesForAggregationBuilder.put(originalAggregation, intermediateVariable);
+
+                // rewrite final aggregation in terms of intermediate function
+                finalAggregationBuilder.put(entry.getKey(), getFinalAggregation(originalAggregation, functionAndTypeManager, intermediateVariable));
+            }
+            else {
+                maskVariablesBuilder.put(originalAggregation, originalAggregation.getMask().get());
+            }
+        }
+        ImmutableMap<AggregationNode.Aggregation, VariableReferenceExpression> intermediateVariablesForAggregation = intermediateVariablesForAggregationBuilder.build();
+        ImmutableMap<AggregationNode.Aggregation, VariableReferenceExpression> maskVariables = maskVariablesBuilder.build();
+
+        AggregationNode.GroupingSetDescriptor partialGroupingSetDescriptor;
+        ImmutableList.Builder<VariableReferenceExpression> groupingVariables = ImmutableList.builder();
+        if (maskVariables.isEmpty()) {
+            partialGroupingSetDescriptor = node.getGroupingSets();
+        }
+        else {
+            AggregationNode.GroupingSetDescriptor groupingSetDescriptor = node.getGroupingSets();
+            groupingVariables.addAll(groupingSetDescriptor.getGroupingKeys());
+            groupingVariables.addAll(maskVariables.values());
+            partialGroupingSetDescriptor = new AggregationNode.GroupingSetDescriptor(
+                    groupingVariables.build(), groupingSetDescriptor.getGroupingSetCount(), groupingSetDescriptor.getGlobalGroupingSets());
+        }
+
+        // We can always enable streaming aggregation for partial aggregations. But if the table is not pre-group by the groupby columns, it may have regressions.
+        // This session property is just a solution to force enabling when we know the execution would benefit from partial streaming aggregation.
+        // We can work on determining it based on the input table properties later.
+        List<VariableReferenceExpression> preGroupedSymbols = ImmutableList.of();
+        if (isStreamingForPartialAggregationEnabled(context.getSession())) {
+            preGroupedSymbols = ImmutableList.copyOf(node.getGroupingSets().getGroupingKeys());
+        }
+
+        PlanNode partial = new AggregationNode(
+                node.getSourceLocation(),
+                context.getIdAllocator().getNextId(),
+                node.getSource(),
+                intermediateAggregationBuilder.build(),
+                partialGroupingSetDescriptor,
+                // preGroupedSymbols reflect properties of the input. Splitting the aggregation and pushing partial aggregation
+                // through the exchange may or may not preserve these properties. Hence, it is safest to drop preGroupedSymbols here.
+                preGroupedSymbols,
+                PARTIAL,
+                node.getHashVariable(),
+                node.getGroupIdVariable());
+
+        if (!maskVariables.isEmpty()) {
+            ImmutableList.Builder<RowExpression> projectionsFromPartialAgg = ImmutableList.builder();
+            ImmutableList.Builder<VariableReferenceExpression> variablesForPartialAggResult = ImmutableList.builder();
+            Map<AggregationNode.Aggregation, List<VariableReferenceExpression>> resultVariablesForAggregation = node.getAggregations().entrySet().stream()
+                    .collect(Collectors.groupingBy(Map.Entry::getValue, Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
+            // project out the aggs with filters
+            for (Map.Entry<AggregationNode.Aggregation, AggregationNode.Aggregation> entry : aggregationsToCombine.entrySet()) {
+                AggregationNode.Aggregation originalAggregation = entry.getKey();
+                AggregationNode.Aggregation aggregationWithoutMask = entry.getValue();
+                VariableReferenceExpression maskVariable = maskVariables.get(originalAggregation);
+                VariableReferenceExpression intermediateVariable = intermediateVariablesForAggregation.get(aggregationWithoutMask);
+                RowExpression conditionalResult = ifThenElse(maskVariable, intermediateVariable, constantNull(intermediateVariable.getType()));
+                projectionsFromPartialAgg.add(conditionalResult);
+                VariableReferenceExpression maskedPartialResult = context.getVariableAllocator().newVariable(intermediateVariable);
+                variablesForPartialAggResult.add(maskedPartialResult);
+
+                // Here this is a merged partial agg so we mask only for final agg
+                AggregationNode.Aggregation maskedFinalAggregation = getFinalAggregation(aggregationWithoutMask, functionAndTypeManager, maskedPartialResult);
+                for (VariableReferenceExpression outputVariable : resultVariablesForAggregation.get(originalAggregation)) {
+                    finalAggregationBuilder.put(outputVariable, maskedFinalAggregation);
+                }
+            }
+
+            partial = addProjections(partial, context.getIdAllocator(), context.getVariableAllocator(), projectionsFromPartialAgg.build(), variablesForPartialAggResult.build());
+        }
+
+        return new AggregationNode(
+                node.getSourceLocation(),
+                node.getId(),
+                partial,
+                finalAggregationBuilder.build(),
+                node.getGroupingSets(),
+                // preGroupedSymbols reflect properties of the input. Splitting the aggregation and pushing partial aggregation
+                // through the exchange may or may not preserve these properties. Hence, it is safest to drop preGroupedSymbols here.
+                ImmutableList.of(),
+                FINAL,
+                node.getHashVariable(),
+                node.getGroupIdVariable());
+    }
+
     private boolean partialAggregationNotUseful(AggregationNode aggregationNode, ExchangeNode exchangeNode, Context context)
     {
         StatsProvider stats = context.getStatsProvider();
@@ -302,8 +395,8 @@ public class PushPartialAggregationThroughExchange
         return exchangeStats.isConfident() && outputBytes > inputBytes * byteReductionThreshold;
     }
 
-    private static boolean isLambda(RowExpression rowExpression)
+    public static RowExpression ifThenElse(RowExpression... arguments)
     {
-        return rowExpression instanceof LambdaDefinitionExpression;
+        return specialForm(SpecialFormExpression.Form.IF, arguments[1].getType(), arguments);
     }
 }

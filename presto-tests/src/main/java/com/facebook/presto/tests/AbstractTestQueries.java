@@ -54,6 +54,7 @@ import static com.facebook.presto.SystemSessionProperties.KEY_BASED_SAMPLING_ENA
 import static com.facebook.presto.SystemSessionProperties.KEY_BASED_SAMPLING_FUNCTION;
 import static com.facebook.presto.SystemSessionProperties.KEY_BASED_SAMPLING_PERCENTAGE;
 import static com.facebook.presto.SystemSessionProperties.LEGACY_UNNEST;
+import static com.facebook.presto.SystemSessionProperties.MERGE_AGGS_WITH_AND_WITHOUT_FILTER;
 import static com.facebook.presto.SystemSessionProperties.OFFSET_CLAUSE_ENABLED;
 import static com.facebook.presto.SystemSessionProperties.OPTIMIZE_CASE_EXPRESSION_PREDICATE;
 import static com.facebook.presto.SystemSessionProperties.OPTIMIZE_JOINS_WITH_EMPTY_SOURCES;
@@ -6451,5 +6452,28 @@ public abstract class AbstractTestQueries
         assertQuery(session,
                 "select count(*) from nation n where (select max_by(custkey, c.name) from customer c where n.nationkey=c.nationkey)>2000",
                 "select 0");
+    }
+
+    @Test
+    public void testSameAggWithAndWithoutFilter()
+    {
+        Session mergeAggs = Session.builder(getSession())
+                .setSystemProperty(MERGE_AGGS_WITH_AND_WITHOUT_FILTER, "true")
+                .build();
+
+        MaterializedResult plan = computeActual(mergeAggs, "explain(type distributed) select regionkey, count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation group by regionkey ");
+        assertTrue(((String) plan.getOnlyValue()).indexOf("count_18 := IF(expr, count_17, null)") != -1);
+        plan = computeActual("explain(type distributed) select regionkey, count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation group by regionkey ");
+        assertTrue(((String) plan.getOnlyValue()).indexOf("count_18 := IF(expr, count_17, null)") == -1);
+
+        assertQuery(mergeAggs, "select regionkey, count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation group by regionkey", "values (3,4,5),(2,5,5),(0,1,5),(4,2,5),(1,3,5)");
+        assertQuery(mergeAggs, "select count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation", "values (15,25)");
+
+        MaterializedResult resultWithOptimization = computeActual(mergeAggs, "select regionkey, count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation group by regionkey");
+        MaterializedResult resultWithoutOptimization = computeActual("select regionkey, count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation group by regionkey");
+        assertEqualsIgnoreOrder(resultWithOptimization, resultWithoutOptimization);
+        resultWithOptimization = computeActual(mergeAggs, "select count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation");
+        resultWithoutOptimization = computeActual("select count(name) filter (where name like '%N%') n_nations, count(name) all_nations from nation");
+        assertEqualsIgnoreOrder(resultWithOptimization, resultWithoutOptimization);
     }
 }
