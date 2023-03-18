@@ -17,19 +17,25 @@ import com.facebook.presto.cost.PlanNodeStatsEstimate;
 import com.facebook.presto.cost.VariableStatsEstimate;
 import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.sql.planner.assertions.PlanMatchPattern;
 import com.facebook.presto.sql.planner.iterative.rule.test.BaseRuleTest;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.Test;
 
+import java.util.Optional;
+
+import static com.facebook.presto.SystemSessionProperties.MERGE_AGGS_WITH_AND_WITHOUT_FILTER;
 import static com.facebook.presto.SystemSessionProperties.PARTIAL_AGGREGATION_STRATEGY;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
+import static com.facebook.presto.spi.plan.AggregationNode.Step.FINAL;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.PARTIAL;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.SINGLE;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.aggregation;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.exchange;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.functionCall;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.project;
+import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.singleGroupingSet;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.values;
 import static com.facebook.presto.sql.planner.iterative.rule.test.PlanBuilder.expression;
 import static com.facebook.presto.sql.relational.Expressions.variable;
@@ -137,5 +143,46 @@ public class TestPushPartialAggregationThroughExchange
                                         ImmutableMap.of("SUM", functionCall("sum", ImmutableList.of("a"))),
                                         PARTIAL,
                                         values("a", "b")))));
+    }
+
+    @Test
+    public void testPartialAggregationMerged()
+    {
+        tester().assertThat(new PushPartialAggregationThroughExchange(getFunctionManager()))
+                .setSystemProperty(PARTIAL_AGGREGATION_STRATEGY, "AUTOMATIC")
+                .setSystemProperty(MERGE_AGGS_WITH_AND_WITHOUT_FILTER, "true")
+                .on(p -> {
+                    VariableReferenceExpression a = p.variable("a");
+                    VariableReferenceExpression k = p.variable("k");
+                    VariableReferenceExpression m = p.variable("m");
+                    return p.aggregation(ab -> ab
+                            .source(
+                                    p.exchange(e -> e
+                                            .addSource(p.values(a, m, k))
+                                            .addInputsSet(a, m, k)
+                                            .singleDistributionPartitioningScheme(a, m, k)))
+                            .addAggregation(p.variable("SUM", DOUBLE), expression("SUM(a)"), ImmutableList.of(DOUBLE))
+                            .addAggregation(p.variable("SUM_MASK", DOUBLE), expression("SUM(a)"), ImmutableList.of(DOUBLE), m)
+                            .singleGroupingSet(k)
+                            .step(SINGLE));
+                })
+                .matches(
+                        aggregation(
+                                singleGroupingSet("k"),
+                                ImmutableMap.of(Optional.of("Sum"), functionCall("sum", ImmutableList.of("partialSum")),
+                                        Optional.of("SumMask"), functionCall("sum", ImmutableList.of("partialSumMask"))),
+                                ImmutableMap.of(),
+                                Optional.empty(),
+                                FINAL,
+                                project(
+                                        ImmutableMap.of("partialSumMask", PlanMatchPattern.expression("IF(m, partialSum, NULL)")),
+                                        aggregation(
+                                                singleGroupingSet("k", "m"),
+                                                ImmutableMap.of(Optional.of("partialSum"), functionCall("sum", ImmutableList.of("a"))),
+                                                ImmutableMap.of(),
+                                                Optional.empty(),
+                                                PARTIAL,
+                                                exchange(
+                                                        values("a", "m", "k"))))));
     }
 }
