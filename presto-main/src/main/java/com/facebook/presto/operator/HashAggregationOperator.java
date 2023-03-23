@@ -16,6 +16,7 @@ package com.facebook.presto.operator;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.PageBuilder;
 import com.facebook.presto.common.block.Block;
+import com.facebook.presto.common.block.RunLengthEncodedBlock;
 import com.facebook.presto.common.type.BigintType;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.operator.aggregation.AccumulatorFactory;
@@ -396,6 +397,19 @@ public class HashAggregationOperator
         inputProcessed = true;
 
         initializeAggregationBuilderIfNeeded();
+        if (groupByChannels.size() == 1 && step.equals(Step.PARTIAL) && page.getPositionCount() > 0) {
+            Block rleBlock = RunLengthEncodedBlock.create(groupByTypes.get(0), groupByTypes.get(0).getSlice(page.getBlock(groupByChannels.get(0)), 0), page.getPositionCount());
+            Block[] newBlocks = new Block[page.getChannelCount()];
+            for (int i = 0; i < newBlocks.length; ++i) {
+                if (i == groupByChannels.get(0)) {
+                    newBlocks[i] = rleBlock;
+                }
+                else {
+                    newBlocks[i] = page.getBlock(i);
+                }
+            }
+            page = Page.wrapBlocksWithoutCopy(page.getPositionCount(), newBlocks);
+        }
         processInputPage(page);
 
         // process the current page; save the unfinished work if we are waiting for memory
