@@ -20,6 +20,8 @@ import com.facebook.presto.spi.function.AccumulatorStateFactory;
 import com.facebook.presto.spi.function.AccumulatorStateSerializer;
 import io.airlift.slice.Slice;
 
+import javax.annotation.Nullable;
+
 import java.lang.invoke.MethodHandle;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,8 +45,11 @@ public class AggregationMetadata
 
     private final String name;
     private final List<ParameterMetadata> valueInputMetadata;
+    private final List<ParameterMetadata> blockValueInputMetadata;
     private final List<Class> lambdaInterfaces;
     private final MethodHandle inputFunction;
+    @Nullable
+    private final MethodHandle blockInputFunction;
     private final MethodHandle combineFunction;
     private final MethodHandle outputFunction;
     private final List<AccumulatorStateDescriptor> accumulatorStateDescriptors;
@@ -62,7 +67,9 @@ public class AggregationMetadata
         this(
                 name,
                 valueInputMetadata,
+                Collections.emptyList(),
                 inputFunction,
+                null,
                 combineFunction,
                 outputFunction,
                 accumulatorStateDescriptors,
@@ -73,7 +80,33 @@ public class AggregationMetadata
     public AggregationMetadata(
             String name,
             List<ParameterMetadata> valueInputMetadata,
+            List<ParameterMetadata> blockValueInputMetadata,
             MethodHandle inputFunction,
+            MethodHandle blockInputFunction,
+            MethodHandle combineFunction,
+            MethodHandle outputFunction,
+            List<AccumulatorStateDescriptor> accumulatorStateDescriptors,
+            Type outputType)
+    {
+        this(
+                name,
+                valueInputMetadata,
+                blockValueInputMetadata,
+                inputFunction,
+                blockInputFunction,
+                combineFunction,
+                outputFunction,
+                accumulatorStateDescriptors,
+                outputType,
+                Collections.emptyList());
+    }
+
+    public AggregationMetadata(
+            String name,
+            List<ParameterMetadata> valueInputMetadata,
+            List<ParameterMetadata> blockValueInputMetadata,
+            MethodHandle inputFunction,
+            MethodHandle blockInputFunction,
             MethodHandle combineFunction,
             MethodHandle outputFunction,
             List<AccumulatorStateDescriptor> accumulatorStateDescriptors,
@@ -82,8 +115,10 @@ public class AggregationMetadata
     {
         this.outputType = requireNonNull(outputType);
         this.valueInputMetadata = Collections.unmodifiableList(new ArrayList<>(requireNonNull(valueInputMetadata, "valueInputMetadata is null")));
+        this.blockValueInputMetadata = Collections.unmodifiableList(new ArrayList<>(requireNonNull(blockValueInputMetadata, "blockValueInputMetadata is null")));;
         this.name = requireNonNull(name, "name is null");
         this.inputFunction = requireNonNull(inputFunction, "inputFunction is null");
+        this.blockInputFunction = blockInputFunction;
         this.combineFunction = requireNonNull(combineFunction, "combineFunction is null");
         this.outputFunction = requireNonNull(outputFunction, "outputFunction is null");
         this.accumulatorStateDescriptors = requireNonNull(accumulatorStateDescriptors, "accumulatorStateDescriptors is null");
@@ -104,6 +139,11 @@ public class AggregationMetadata
         return valueInputMetadata;
     }
 
+    public List<ParameterMetadata> getBlockValueInputMetadata()
+    {
+        return blockValueInputMetadata;
+    }
+
     public List<Class> getLambdaInterfaces()
     {
         return lambdaInterfaces;
@@ -117,6 +157,12 @@ public class AggregationMetadata
     public MethodHandle getInputFunction()
     {
         return inputFunction;
+    }
+
+    @Nullable
+    public MethodHandle getBlockInputFunction()
+    {
+        return blockInputFunction;
     }
 
     public MethodHandle getCombineFunction()

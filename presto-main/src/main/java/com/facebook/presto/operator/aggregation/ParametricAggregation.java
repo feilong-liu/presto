@@ -89,11 +89,17 @@ public class ParametricAggregation
 
         // Bind provided dependencies to aggregation method handlers
         MethodHandle inputHandle = bindDependencies(concreteImplementation.getInputFunction(), concreteImplementation.getInputDependencies(), variables, functionAndTypeManager);
+        MethodHandle blockInputHandle = null;
+        if (concreteImplementation.getBlockInputFunction() != null) {
+            blockInputHandle = bindDependencies(concreteImplementation.getBlockInputFunction(), concreteImplementation.getInputDependencies(), variables, functionAndTypeManager);
+        }
         MethodHandle combineHandle = bindDependencies(concreteImplementation.getCombineFunction(), concreteImplementation.getCombineDependencies(), variables, functionAndTypeManager);
         MethodHandle outputHandle = bindDependencies(concreteImplementation.getOutputFunction(), concreteImplementation.getOutputDependencies(), variables, functionAndTypeManager);
 
         // Build metadata of input parameters
         List<ParameterMetadata> parametersMetadata = buildParameterMetadata(concreteImplementation.getInputParameterMetadataTypes(), inputTypes);
+        List<ParameterMetadata> blockInputParametersMetadata = buildParameterMetadata(concreteImplementation.getBlockInputParameterMetadataTypes(),
+                concreteImplementation.getBlockInputArgumentTypes().stream().map(functionAndTypeManager::getType).collect(toImmutableList()));
 
         // Generate Aggregation name
         String aggregationName = generateAggregationName(getSignature().getNameSuffix(), outputType.getTypeSignature(), signaturesFromTypes(inputTypes));
@@ -102,7 +108,9 @@ public class ParametricAggregation
         AggregationMetadata metadata = new AggregationMetadata(
                 aggregationName,
                 parametersMetadata,
+                blockInputParametersMetadata,
                 inputHandle,
+                blockInputHandle,
                 combineHandle,
                 outputHandle,
                 ImmutableList.of(new AccumulatorStateDescriptor(
