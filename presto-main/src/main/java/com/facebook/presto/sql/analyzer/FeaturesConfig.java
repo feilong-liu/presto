@@ -251,6 +251,8 @@ public class FeaturesConfig
     private boolean isOptimizeJoinProbeWithEmptyBuildRuntime;
     private boolean useDefaultsForCorrelatedAggregationPushdownThroughOuterJoins = true;
     private boolean mergeDuplicateAggregationsEnabled = true;
+    private boolean optimizeAggregationPartitionedRuntimeEnabled = true;
+
     public enum PartitioningPrecisionStrategy
     {
         // Let Presto decide when to repartition
@@ -2422,6 +2424,19 @@ public class FeaturesConfig
     public FeaturesConfig setMergeDuplicateAggregationsEnabled(boolean mergeDuplicateAggregationsEnabled)
     {
         this.mergeDuplicateAggregationsEnabled = mergeDuplicateAggregationsEnabled;
+        return this;
+    }
+
+    public boolean isOptimizeAggregationPartitionedRuntimeEnabled()
+    {
+        return optimizeAggregationPartitionedRuntimeEnabled;
+    }
+
+    @Config("optimizer.optimize-aggregation-partitioned-runtime")
+    @ConfigDescription("Enable optimization of global aggregations and aggregations group by partitioned keys")
+    public FeaturesConfig setOptimizeAggregationPartitionedRuntimeEnabled(boolean optimizeAggregationPartitionedRuntimeEnabled)
+    {
+        this.optimizeAggregationPartitionedRuntimeEnabled = optimizeAggregationPartitionedRuntimeEnabled;
         return this;
     }
 }
