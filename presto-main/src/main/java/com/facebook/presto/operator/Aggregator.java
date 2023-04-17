@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.type.Type;
@@ -24,10 +25,13 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 class Aggregator
 {
+    private static final Logger log = Logger.get(Aggregator.class);
     private final Accumulator aggregation;
     private final AggregationNode.Step step;
     private final int intermediateChannel;
     private final boolean optimizeSingleGroupInputPage;
+    private int blockInputCount;
+    private int normalInputCount;
 
     Aggregator(AccumulatorFactory accumulatorFactory, AggregationNode.Step step, UpdateMemory updateMemory, boolean optimizeSingleGroupInputPage)
     {
@@ -42,6 +46,8 @@ class Aggregator
         }
         this.step = step;
         this.optimizeSingleGroupInputPage = optimizeSingleGroupInputPage;
+        this.blockInputCount = 0;
+        this.normalInputCount = 0;
     }
 
     public Type getType()
@@ -58,9 +64,11 @@ class Aggregator
     {
         if (step.isInputRaw()) {
             if (aggregation.hasAddBlockInput() && optimizeSingleGroupInputPage) {
+                ++blockInputCount;
                 aggregation.addBlockInput(page);
             }
             else {
+                ++normalInputCount;
                 aggregation.addInput(page);
             }
         }
@@ -77,6 +85,7 @@ class Aggregator
         else {
             aggregation.evaluateFinal(blockBuilder);
         }
+        log.info("block input: " + blockInputCount + " normal input: " + normalInputCount);
     }
 
     public long getEstimatedSize()
