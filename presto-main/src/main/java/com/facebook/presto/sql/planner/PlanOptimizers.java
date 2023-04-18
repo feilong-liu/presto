@@ -135,6 +135,7 @@ import com.facebook.presto.sql.planner.optimizations.IndexJoinOptimizer;
 import com.facebook.presto.sql.planner.optimizations.KeyBasedSampler;
 import com.facebook.presto.sql.planner.optimizations.LimitPushDown;
 import com.facebook.presto.sql.planner.optimizations.MergeJoinForSortedInputOptimizer;
+import com.facebook.presto.sql.planner.optimizations.MergeJoinToStarJoin;
 import com.facebook.presto.sql.planner.optimizations.MergePartialAggregationsWithFilter;
 import com.facebook.presto.sql.planner.optimizations.MetadataDeleteOptimizer;
 import com.facebook.presto.sql.planner.optimizations.MetadataQueryOptimizer;
@@ -412,6 +413,7 @@ public class PlanOptimizers
                                 new RemoveRedundantIdentityProjections(),
                                 new TransformCorrelatedSingleRowSubqueryToProject())),
                 new CheckSubqueryNodesAreRewritten(),
+                new MergeJoinToStarJoin(metadata.getFunctionAndTypeManager()),
                 new IterativeOptimizer(
                         ruleStats,
                         statsCalculator,
