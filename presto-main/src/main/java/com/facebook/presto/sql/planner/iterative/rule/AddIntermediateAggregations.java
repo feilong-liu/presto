@@ -25,6 +25,7 @@ import com.facebook.presto.spi.plan.ProjectNode;
 import com.facebook.presto.spi.relation.CallExpression;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.sql.planner.Partitioning;
 import com.facebook.presto.sql.planner.TypeProvider;
 import com.facebook.presto.sql.planner.iterative.Lookup;
 import com.facebook.presto.sql.planner.iterative.Rule;
@@ -37,21 +38,20 @@ import java.util.Optional;
 
 import static com.facebook.presto.SystemSessionProperties.getTaskConcurrency;
 import static com.facebook.presto.SystemSessionProperties.isEnableIntermediateAggregations;
-import static com.facebook.presto.matching.Pattern.empty;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.FINAL;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.INTERMEDIATE;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.PARTIAL;
+import static com.facebook.presto.sql.planner.SystemPartitioningHandle.FIXED_HASH_DISTRIBUTION;
 import static com.facebook.presto.sql.planner.optimizations.AggregationNodeUtils.extractAggregationUniqueVariables;
 import static com.facebook.presto.sql.planner.plan.ExchangeNode.Scope.LOCAL;
 import static com.facebook.presto.sql.planner.plan.ExchangeNode.gatheringExchange;
+import static com.facebook.presto.sql.planner.plan.ExchangeNode.partitionedExchange;
 import static com.facebook.presto.sql.planner.plan.ExchangeNode.roundRobinExchange;
-import static com.facebook.presto.sql.planner.plan.Patterns.Aggregation.groupingColumns;
 import static com.facebook.presto.sql.planner.plan.Patterns.Aggregation.step;
 import static com.facebook.presto.sql.planner.plan.Patterns.aggregation;
 import static com.facebook.presto.sql.relational.OriginalExpressionUtils.castToExpression;
 import static com.facebook.presto.sql.relational.OriginalExpressionUtils.isExpression;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.Iterables.getOnlyElement;
 
 /**
@@ -83,7 +83,6 @@ public class AddIntermediateAggregations
     private static final Pattern<AggregationNode> PATTERN = aggregation()
             // Only consider FINAL un-grouped aggregations
             .with(step().equalTo(FINAL))
-            .with(empty(groupingColumns()))
             // Only consider aggregations without ORDER BY clause
             .matching(node -> !node.hasOrderings());
 
@@ -165,8 +164,14 @@ public class AddIntermediateAggregations
 
     private PlanNode addGatheringIntermediate(AggregationNode aggregation, PlanNodeIdAllocator idAllocator, TypeProvider types)
     {
-        verify(aggregation.getGroupingKeys().isEmpty(), "Should be an un-grouped aggregation");
-        ExchangeNode gatheringExchange = gatheringExchange(idAllocator.getNextId(), LOCAL, aggregation);
+        ExchangeNode gatheringExchange;
+        if (!aggregation.getGroupingKeys().isEmpty()) {
+            gatheringExchange = partitionedExchange(idAllocator.getNextId(), LOCAL, aggregation,
+                    Partitioning.create(FIXED_HASH_DISTRIBUTION, ImmutableList.copyOf(aggregation.getGroupingKeys())), Optional.empty());
+        }
+        else {
+            gatheringExchange = gatheringExchange(idAllocator.getNextId(), LOCAL, aggregation);
+        }
         return new AggregationNode(
                 aggregation.getSourceLocation(),
                 idAllocator.getNextId(),
