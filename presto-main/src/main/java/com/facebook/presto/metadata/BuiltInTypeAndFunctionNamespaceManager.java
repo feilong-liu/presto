@@ -148,6 +148,7 @@ import com.facebook.presto.operator.scalar.JoniRegexpFunctions;
 import com.facebook.presto.operator.scalar.JoniRegexpReplaceLambdaFunction;
 import com.facebook.presto.operator.scalar.JsonFunctions;
 import com.facebook.presto.operator.scalar.JsonOperators;
+import com.facebook.presto.operator.scalar.MapAnyMatchFunction;
 import com.facebook.presto.operator.scalar.MapCardinalityFunction;
 import com.facebook.presto.operator.scalar.MapDistinctFromOperator;
 import com.facebook.presto.operator.scalar.MapEntriesFunction;
@@ -825,6 +826,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalar(MapKeys.class)
                 .scalar(MapValues.class)
                 .scalar(MapCardinalityFunction.class)
+                .scalar(MapAnyMatchFunction.class)
                 .scalar(EmptyMapConstructor.class)
                 .scalar(MapIndeterminateOperator.class)
                 .scalar(TypeOfFunction.class)
