@@ -180,8 +180,7 @@ public class MergePartialAggregationsWithFilter
             // aggregation output is projected to be NULL if mask is false. We need to have the function to not calledOnNullInput to ensure correctness.
             // Applying optimizations on global aggregations will lead to exception at
             // https://github.com/prestodb/presto/blob/dfbf21744ccd900d1a650571ffc35915db9b9f59/presto-main/src/main/java/com/facebook/presto/operator/HashAggregationOperator.java#L627
-            boolean canOptimize = !node.getGroupingKeys().isEmpty() && node.getAggregations().values().stream()
-                    .map(x -> functionAndTypeManager.getFunctionMetadata(x.getFunctionHandle())).noneMatch(x -> x.isCalledOnNullInput());
+            boolean canOptimize = !node.getGroupingKeys().isEmpty();
             if (canOptimize) {
                 checkState(node.getAggregations().values().stream().noneMatch(x -> x.getFilter().isPresent()), "All aggregation filters should already be rewritten to mask before this optimization");
                 if (node.getStep().equals(PARTIAL)) {
