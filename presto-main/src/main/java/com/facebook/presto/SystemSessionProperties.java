@@ -263,6 +263,7 @@ public final class SystemSessionProperties
     public static final String MERGE_DUPLICATE_AGGREGATIONS = "merge_duplicate_aggregations";
     public static final String MERGE_AGGREGATIONS_WITH_AND_WITHOUT_FILTER = "merge_aggregations_with_and_without_filter";
     public static final String SIMPLIFY_PLAN_WITH_EMPTY_INPUT = "simplify_plan_with_empty_input";
+    public static final String REWRITE_CROSS_JOIN_OR_TO_INNER_JOIN = "rewrite_cross_join_or_to_inner_join";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1522,6 +1523,11 @@ public final class SystemSessionProperties
                         SIMPLIFY_PLAN_WITH_EMPTY_INPUT,
                         "Simplify the query plan with empty input",
                         featuresConfig.isSimplifyPlanWithEmptyInput(),
+                        false),
+                booleanProperty(
+                        REWRITE_CROSS_JOIN_OR_TO_INNER_JOIN,
+                        "Rewrite cross join with or filter to inner join",
+                        featuresConfig.isRewriteCrossJoinWithOrFilterToInnerJoin(),
                         false));
     }
 
@@ -2552,5 +2558,10 @@ public final class SystemSessionProperties
     public static boolean isSimplifyPlanWithEmptyInputEnabled(Session session)
     {
         return session.getSystemProperty(SIMPLIFY_PLAN_WITH_EMPTY_INPUT, Boolean.class) || session.getSystemProperty(OPTIMIZE_JOINS_WITH_EMPTY_SOURCES, Boolean.class);
+    }
+
+    public static boolean isRewriteCrossJoinOrToInnerJoinEnabled(Session session)
+    {
+        return session.getSystemProperty(REWRITE_CROSS_JOIN_OR_TO_INNER_JOIN, Boolean.class);
     }
 }
