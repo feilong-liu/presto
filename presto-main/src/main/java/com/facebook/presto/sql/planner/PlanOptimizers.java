@@ -98,6 +98,7 @@ import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantAggregateDi
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantDistinct;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantDistinctLimit;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantIdentityProjections;
+import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantIdentityProjectionsAfterHashGeneration;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantLimit;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantSort;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantTopN;
@@ -730,6 +731,12 @@ public class PlanOptimizers
 
         // Precomputed hashes - this assumes that partitioning will not change
         builder.add(new HashGenerationOptimizer(metadata.getFunctionAndTypeManager()));
+
+        builder.add(new IterativeOptimizer(
+                ruleStats,
+                statsCalculator,
+                costCalculator,
+                ImmutableSet.of(new RemoveRedundantIdentityProjectionsAfterHashGeneration())));
 
         builder.add(new MetadataDeleteOptimizer(metadata));
 
