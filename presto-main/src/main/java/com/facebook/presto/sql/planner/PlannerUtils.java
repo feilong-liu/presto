@@ -16,6 +16,7 @@ package com.facebook.presto.sql.planner;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.block.SortOrder;
 import com.facebook.presto.common.function.OperatorType;
+import com.facebook.presto.common.type.ArrayType;
 import com.facebook.presto.common.type.MapType;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.cost.StatsAndCosts;
@@ -39,6 +40,7 @@ import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.SpecialFormExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.sql.analyzer.Field;
+import com.facebook.presto.sql.planner.plan.UnnestNode;
 import com.facebook.presto.sql.planner.planPrinter.PlanPrinter;
 import com.facebook.presto.sql.relational.FunctionResolution;
 import com.facebook.presto.sql.tree.ComparisonExpression;
@@ -63,6 +65,7 @@ import java.util.Set;
 import static com.facebook.presto.common.function.OperatorType.EQUAL;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
+import static com.facebook.presto.common.type.IntegerType.INTEGER;
 import static com.facebook.presto.spi.plan.ProjectNode.Locality.LOCAL;
 import static com.facebook.presto.sql.analyzer.ExpressionTreeUtils.getSourceLocation;
 import static com.facebook.presto.sql.analyzer.TypeSignatureProvider.fromTypes;
@@ -217,6 +220,27 @@ public class PlannerUtils
                 source,
                 assignments.build(),
                 LOCAL);
+    }
+
+    public static UnnestNode duplicateOutputWithUnnest(PlanNode source, int duplicates, VariableReferenceExpression indexVariable, PlanNodeIdAllocator idAllocator,
+            VariableAllocator variableAllocator, FunctionAndTypeManager functionAndTypeManager)
+    {
+        ImmutableList.Builder<RowExpression> constantsArgument = ImmutableList.builder();
+        for (int i = 0; i < duplicates; ++i) {
+            constantsArgument.add(constant((long) i + 1, INTEGER));
+        }
+        CallExpression arrayConstruct = call(functionAndTypeManager, "array_constructor", new ArrayType(INTEGER), constantsArgument.build());
+
+        VariableReferenceExpression arrayVariable = variableAllocator.newVariable(arrayConstruct);
+        ImmutableMap.Builder<VariableReferenceExpression, RowExpression> projectAssignment = ImmutableMap.builder();
+        PlanNode project = PlannerUtils.addProjections(source, idAllocator, projectAssignment.put(arrayVariable, arrayConstruct).build());
+
+        return new UnnestNode(source.getSourceLocation(),
+                idAllocator.getNextId(),
+                project,
+                project.getOutputVariables().stream().filter(x -> !x.equals(arrayVariable)).collect(toImmutableList()),
+                ImmutableMap.of(arrayVariable, ImmutableList.of(indexVariable)),
+                Optional.empty());
     }
 
     public static PlanNode addAggregation(PlanNode planNode, FunctionAndTypeManager functionAndTypeManager, PlanNodeIdAllocator planNodeIdAllocator, VariableAllocator variableAllocator, String aggregationFunction, Type type, List<VariableReferenceExpression> groupingKeys, VariableReferenceExpression resultVariable, RowExpression... args)

@@ -152,6 +152,7 @@ import com.facebook.presto.sql.planner.optimizations.RandomizeNullKeyInOuterJoin
 import com.facebook.presto.sql.planner.optimizations.RemoveRedundantDistinctAggregation;
 import com.facebook.presto.sql.planner.optimizations.ReplicateSemiJoinInDelete;
 import com.facebook.presto.sql.planner.optimizations.RewriteIfOverAggregation;
+import com.facebook.presto.sql.planner.optimizations.RewriteUnionWithCommonSource;
 import com.facebook.presto.sql.planner.optimizations.SetFlatteningOptimizer;
 import com.facebook.presto.sql.planner.optimizations.SimplifyPlanWithEmptyInput;
 import com.facebook.presto.sql.planner.optimizations.StatsRecordingPlanOptimizer;
@@ -433,6 +434,17 @@ public class PlanOptimizers
                                 new InlineProjections(metadata.getFunctionAndTypeManager()),
                                 new RemoveRedundantIdentityProjections())),
                 new RewriteIfOverAggregation(metadata.getFunctionAndTypeManager()));
+
+        builder.add(
+                new IterativeOptimizer(
+                        ruleStats,
+                        statsCalculator,
+                        estimatedExchangesCostCalculator,
+                        ImmutableSet.of(
+                                new PruneRedundantProjectionAssignments(),
+                                new InlineProjections(metadata.getFunctionAndTypeManager()),
+                                new RemoveRedundantIdentityProjections())),
+                new RewriteUnionWithCommonSource(metadata.getFunctionAndTypeManager()));
 
         builder.add(
                 caseExpressionPredicateRewriter,

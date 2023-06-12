@@ -273,6 +273,7 @@ public final class SystemSessionProperties
     public static final String REWRITE_CROSS_JOIN_OR_TO_INNER_JOIN = "rewrite_cross_join_or_to_inner_join";
     public static final String REWRITE_CROSS_JOIN_ARRAY_CONTAINS_TO_INNER_JOIN = "rewrite_cross_join_array_contains_to_inner_join";
     public static final String REWRITE_LEFT_JOIN_NULL_FILTER_TO_SEMI_JOIN = "rewrite_left_join_null_filter_to_semi_join";
+    public static final String REWRITE_UNION_WITH_COMMON_SOURCES_UNDER_PROJECT = "rewrite_union_with_common_sources_under_project";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1585,6 +1586,11 @@ public final class SystemSessionProperties
                         REWRITE_LEFT_JOIN_NULL_FILTER_TO_SEMI_JOIN,
                         "Rewrite left join with is null check to semi join",
                         featuresConfig.isLeftJoinNullFilterToSemiJoin(),
+                        false),
+                booleanProperty(
+                        REWRITE_UNION_WITH_COMMON_SOURCES_UNDER_PROJECT,
+                        "Rewrite left join with is null check to semi join",
+                        true,
                         false));
     }
 
@@ -2662,5 +2668,10 @@ public final class SystemSessionProperties
     public static boolean isRewriteLeftJoinNullFilterToSemiJoinEnabled(Session session)
     {
         return session.getSystemProperty(REWRITE_LEFT_JOIN_NULL_FILTER_TO_SEMI_JOIN, Boolean.class);
+    }
+
+    public static boolean isRewriteUnionWithCommonSourceUnderProjectEnabled(Session session)
+    {
+        return session.getSystemProperty(REWRITE_UNION_WITH_COMMON_SOURCES_UNDER_PROJECT, Boolean.class);
     }
 }
