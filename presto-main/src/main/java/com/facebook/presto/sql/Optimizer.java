@@ -44,6 +44,7 @@ import java.util.Optional;
 
 import static com.facebook.presto.SystemSessionProperties.getQueryAnalyzerTimeout;
 import static com.facebook.presto.SystemSessionProperties.isPrintStatsForNonJoinQuery;
+import static com.facebook.presto.SystemSessionProperties.isValidatePlanAfterEveryOptimizerEnabled;
 import static com.facebook.presto.SystemSessionProperties.isVerboseOptimizerInfoEnabled;
 import static com.facebook.presto.common.RuntimeUnit.NANO;
 import static com.facebook.presto.spi.StandardErrorCode.QUERY_PLANNING_TIMEOUT;
@@ -115,6 +116,9 @@ public class Optimizer
                 }
                 collectOptimizerInformation(optimizer, root, newRoot);
                 root = newRoot;
+                if (isValidatePlanAfterEveryOptimizerEnabled(session)) {
+                    planChecker.validateFinalPlan(root, session, metadata, sqlParser, TypeProvider.viewOf(variableAllocator.getVariables()), warningCollector);
+                }
             }
         }
 
