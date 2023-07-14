@@ -14,6 +14,7 @@
 package com.facebook.presto.cost;
 
 import com.facebook.presto.Session;
+import com.facebook.presto.common.RuntimeUnit;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
 import com.facebook.presto.spi.plan.AggregationNode;
 import com.facebook.presto.spi.plan.PlanNode;
@@ -86,18 +87,22 @@ public class HistoryBasedPlanStatisticsCalculator
         if (!PlanNodeSearcher.searchFrom(root).where(node -> PRECOMPUTE_PLAN_NODES.stream().anyMatch(clazz -> clazz.isInstance(node))).matches()) {
             return;
         }
+        long startTimeInNano = System.nanoTime();
         ImmutableList.Builder<PlanNodeWithHash> planNodesWithHash = ImmutableList.builder();
         forTree(PlanNode::getSources).depthFirstPreOrder(root).forEach(plan -> {
             if (plan.getStatsEquivalentPlanNode().isPresent()) {
                 planNodesWithHash.addAll(getPlanNodeHashes(plan, session).values());
             }
         });
+        long medTime = System.nanoTime();
+        session.getRuntimeStats().addMetricValue("registerPlanGetPlanHashes", RuntimeUnit.NANO, medTime - startTimeInNano);
         try {
             historyBasedStatisticsCacheManager.getStatisticsCache(session.getQueryId(), historyBasedPlanStatisticsProvider).getAll(planNodesWithHash.build());
         }
         catch (ExecutionException e) {
             throw new RuntimeException("Unable to register plan: ", e.getCause());
         }
+        session.getRuntimeStats().addMetricValue("registerPlanGetPlanHashes", RuntimeUnit.NANO, System.nanoTime() - medTime);
     }
 
     @VisibleForTesting

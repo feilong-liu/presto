@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql.planner;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
 import com.facebook.presto.cost.HistoryBasedStatisticsCacheManager;
@@ -21,10 +22,12 @@ import com.facebook.presto.spi.Constraint;
 import com.facebook.presto.spi.TableHandle;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.statistics.PlanStatistics;
+import com.facebook.presto.spi.statistics.TableStatistics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -35,10 +38,12 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.hash.Hashing.sha256;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 public class CachingPlanCanonicalInfoProvider
         implements PlanCanonicalInfoProvider
 {
+    private final static Logger logger = Logger.get(CachingPlanCanonicalInfoProvider.class);
     private final HistoryBasedStatisticsCacheManager historyBasedStatisticsCacheManager;
     private final ObjectMapper objectMapper;
     private final Metadata metadata;
@@ -78,16 +83,24 @@ public class CachingPlanCanonicalInfoProvider
             // Compute input table statistics for the plan node. This is useful in history based optimizations,
             // where historical plan statistics are reused if input tables are similar in size across runs.
             List<PlanStatistics> inputTableStatistics = context.getInputTables().get(plan).stream()
-                    .map(table -> metadata.getTableStatistics(
-                            session,
-                            // Remove table layout, so we don't include filter stats
-                            new TableHandle(
-                                    table.getTable().getConnectorId(),
-                                    table.getTable().getConnectorHandle(),
-                                    table.getTable().getTransaction(),
-                                    Optional.empty()),
-                            ImmutableList.copyOf(table.getAssignments().values()),
-                            new Constraint<>(table.getCurrentConstraint())))
+                    .map(
+                            table ->
+                            {
+                                long start = System.nanoTime();
+                                TableStatistics statistics = metadata.getTableStatistics(
+                                        session,
+                                        // Remove table layout, so we don't include filter stats
+                                        new TableHandle(
+                                                table.getTable().getConnectorId(),
+                                                table.getTable().getConnectorHandle(),
+                                                table.getTable().getTransaction(),
+                                                Optional.empty()),
+                                        ImmutableList.copyOf(table.getAssignments().values()),
+                                        new Constraint<>(table.getCurrentConstraint()));
+                                logger.info("cachekey %s table %s time spent in ms %d", key, table, NANOSECONDS.toMillis(System.nanoTime() - start));
+                                return statistics;
+                            }
+                    )
                     .map(tableStatistics -> new PlanStatistics(tableStatistics.getRowCount(), tableStatistics.getTotalSize(), 1))
                     .collect(toImmutableList());
             cache.put(new CacheKey(plan, key.getStrategy()), new PlanNodeCanonicalInfo(hashValue, inputTableStatistics));
