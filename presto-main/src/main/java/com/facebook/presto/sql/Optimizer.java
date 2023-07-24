@@ -102,7 +102,9 @@ public class Optimizer
 
     public Plan validateAndOptimizePlan(PlanNode root, PlanStage stage)
     {
+        long startTimeInNano = System.nanoTime();
         planChecker.validateIntermediatePlan(root, session, metadata, sqlParser, TypeProvider.viewOf(variableAllocator.getVariables()), warningCollector);
+        session.getRuntimeStats().addMetricValue("validateIntermediatePlan", NANO, System.nanoTime() - startTimeInNano);
 
         boolean enableVerboseRuntimeStats = SystemSessionProperties.isVerboseRuntimeStatsEnabled(session);
         if (stage.ordinal() >= OPTIMIZED.ordinal()) {
@@ -113,6 +115,10 @@ public class Optimizer
                 long start = System.nanoTime();
                 PlanNode newRoot = optimizer.optimize(root, session, TypeProvider.viewOf(variableAllocator.getVariables()), variableAllocator, idAllocator, warningCollector);
                 requireNonNull(newRoot, format("%s returned a null plan", optimizer.getClass().getName()));
+                TypeProvider types = TypeProvider.viewOf(variableAllocator.getVariables());
+
+                collectOptimizerInformation(optimizer, root, newRoot, types);
+                root = newRoot;
                 if (enableVerboseRuntimeStats) {
                     String optimizerName = optimizer.getClass().getSimpleName();
                     if (optimizer instanceof StatsRecordingPlanOptimizer) {
@@ -120,19 +126,18 @@ public class Optimizer
                     }
                     session.getRuntimeStats().addMetricValue(String.format("optimizer%sTimeNanos", optimizerName), NANO, System.nanoTime() - start);
                 }
-                TypeProvider types = TypeProvider.viewOf(variableAllocator.getVariables());
-
-                collectOptimizerInformation(optimizer, root, newRoot, types);
-                root = newRoot;
             }
         }
 
+        long startInNano = System.nanoTime();
         if (stage.ordinal() >= OPTIMIZED_AND_VALIDATED.ordinal()) {
             // make sure we produce a valid plan after optimizations run. This is mainly to catch programming errors
             planChecker.validateFinalPlan(root, session, metadata, sqlParser, TypeProvider.viewOf(variableAllocator.getVariables()), warningCollector);
         }
+        session.getRuntimeStats().addMetricValue("validateFinalPlan", NANO, System.nanoTime() - startInNano);
 
         TypeProvider types = TypeProvider.viewOf(variableAllocator.getVariables());
+
         return new Plan(root, types, computeStats(root, types));
     }
 
