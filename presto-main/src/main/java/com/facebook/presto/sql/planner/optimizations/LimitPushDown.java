@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static com.facebook.presto.SystemSessionProperties.isPushLimitThroughProjectEnabled;
 import static com.facebook.presto.spi.plan.LimitNode.Step.FINAL;
 import static com.facebook.presto.spi.plan.LimitNode.Step.PARTIAL;
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -47,6 +48,9 @@ public class LimitPushDown
     @Override
     public PlanNode optimize(PlanNode plan, Session session, TypeProvider types, VariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator, WarningCollector warningCollector)
     {
+        if (!isPushLimitThroughProjectEnabled(session)) {
+            return plan;
+        }
         requireNonNull(plan, "plan is null");
         requireNonNull(session, "session is null");
         requireNonNull(types, "types is null");

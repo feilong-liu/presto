@@ -280,6 +280,7 @@ public final class SystemSessionProperties
     public static final String USE_BROADCAST_WHEN_BUILDSIZE_SMALL_PROBESIDE_UNKNOWN = "use_broadcast_when_buildsize_small_probeside_unknown";
     public static final String ADD_PARTIAL_NODE_FOR_ROW_NUMBER_WITH_LIMIT = "add_partial_node_for_row_number_with_limit";
     public static final String REWRITE_CASE_TO_MAP_ENABLED = "rewrite_case_to_map_enabled";
+    public static final String PUSH_LIMIT_THROUGH_PROJECT_ENABLED = "push_limit_through_project_enabled";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
@@ -1631,6 +1632,11 @@ public final class SystemSessionProperties
                         REWRITE_CASE_TO_MAP_ENABLED,
                         "Rewrite case with constant WHEN/THEN/ELSE clauses to use map literals",
                         TRUE,
+                        false),
+                booleanProperty(
+                        PUSH_LIMIT_THROUGH_PROJECT_ENABLED,
+                        "Rewrite case with constant WHEN/THEN/ELSE clauses to use map literals",
+                        TRUE,
                         false));
     }
 
@@ -2743,5 +2749,10 @@ public final class SystemSessionProperties
     public static boolean isRewriteCaseToMapEnabled(Session session)
     {
         return session.getSystemProperty(REWRITE_CASE_TO_MAP_ENABLED, Boolean.class);
+    }
+
+    public static boolean isPushLimitThroughProjectEnabled(Session session)
+    {
+        return session.getSystemProperty(PUSH_LIMIT_THROUGH_PROJECT_ENABLED, Boolean.class);
     }
 }
