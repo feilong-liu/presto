@@ -14,6 +14,7 @@
 
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatistics;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatisticsEntry;
 import com.facebook.presto.spi.statistics.PlanStatistics;
@@ -26,6 +27,7 @@ import static java.lang.Double.isNaN;
 
 public class HistoricalPlanStatisticsUtil
 {
+    private static final Logger log = Logger.get(HistoricalPlanStatisticsUtil.class);
     private HistoricalPlanStatisticsUtil() {}
 
     /**
@@ -37,17 +39,21 @@ public class HistoricalPlanStatisticsUtil
             HistoryBasedOptimizationConfig config)
     {
         List<HistoricalPlanStatisticsEntry> lastRunsStatistics = historicalPlanStatistics.getLastRunsStatistics();
+        log.info("lastRunsStatistics %s", lastRunsStatistics);
         if (lastRunsStatistics.isEmpty()) {
             return PlanStatistics.empty();
         }
 
         Optional<Integer> similarStatsIndex = getSimilarStatsIndex(historicalPlanStatistics, inputTableStatistics, config.getHistoryMatchingThreshold());
-
+        log.info("similarStatsIndex" + similarStatsIndex);
+        log.info("HBO historicalPlanStatistics %s inputTableStatistics %s", historicalPlanStatistics, inputTableStatistics);
         if (similarStatsIndex.isPresent()) {
+            log.info("HBO similar");
             return lastRunsStatistics.get(similarStatsIndex.get()).getPlanStatistics();
         }
 
         // TODO: Use linear regression to predict stats if we have only 1 table.
+        log.info("HBO Not similar");
         return PlanStatistics.empty();
     }
 

@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
 import com.facebook.presto.spi.plan.PlanNode;
@@ -48,6 +49,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class HistoryBasedPlanStatisticsCalculator
         implements StatsCalculator
 {
+    private static final Logger log = Logger.get(HistoryBasedPlanStatisticsCalculator.class);
     private final Supplier<HistoryBasedPlanStatisticsProvider> historyBasedPlanStatisticsProvider;
     private final HistoryBasedStatisticsCacheManager historyBasedStatisticsCacheManager;
     private final StatsCalculator delegate;
@@ -72,6 +74,12 @@ public class HistoryBasedPlanStatisticsCalculator
     public PlanNodeStatsEstimate calculateStats(PlanNode node, StatsProvider sourceStats, Lookup lookup, Session session, TypeProvider types)
     {
         PlanNodeStatsEstimate delegateStats = delegate.calculateStats(node, sourceStats, lookup, session, types);
+        if (delegateStats.equals(PlanNodeStatsEstimate.unknown())) {
+            log.info("PlanNode %s delegateStats unknown", node);
+        }
+        if (Double.isNaN(delegateStats.getOutputRowCount())) {
+            log.info("PlanNode %s getOutputRowCount NaN", node);
+        }
         return getStatistics(node, session, lookup, delegateStats);
     }
 
@@ -96,6 +104,7 @@ public class HistoryBasedPlanStatisticsCalculator
         }
         // Return true even if get empty history statistics, so that HistoricalStatisticsEquivalentPlanMarkingOptimizer still return the plan with StatsEquivalentPlanNode which
         // will be used in populating history statistics
+        log.info("HBO registerPlan succeeds");
         return true;
     }
 
@@ -147,12 +156,14 @@ public class HistoryBasedPlanStatisticsCalculator
 
         PlanNode plan = resolveGroupReferences(planNode, lookup);
         Map<PlanCanonicalizationStrategy, PlanNodeWithHash> allHashes = getPlanNodeHashes(plan, session);
+        log.info("HBO allHashes %s", allHashes);
 
         Map<PlanNodeWithHash, HistoricalPlanStatistics> statistics = ImmutableMap.of();
         try {
             statistics = historyBasedStatisticsCacheManager
                     .getStatisticsCache(session.getQueryId(), historyBasedPlanStatisticsProvider, getHistoryBasedOptimizerTimeoutLimit(session).toMillis())
                     .getAll(allHashes.values().stream().distinct().collect(toImmutableList()));
+            log.info(format("HBO statistics %s", statistics));
         }
         catch (ExecutionException e) {
             throw new RuntimeException(format("Unable to get plan statistics for %s", planNode), e.getCause());
@@ -164,7 +175,9 @@ public class HistoryBasedPlanStatisticsCalculator
                     Optional<List<PlanStatistics>> inputTableStatistics = getPlanNodeInputTableStatistics(plan, session);
                     if (inputTableStatistics.isPresent()) {
                         PlanStatistics predictedPlanStatistics = getPredictedPlanStatistics(entry.getValue(), inputTableStatistics.get(), config);
+                        log.info("predictedPlanStatistics %s", predictedPlanStatistics);
                         if (predictedPlanStatistics.getConfidence() > 0) {
+                            log.info("HBO get meaningful stats");
                             return delegateStats.combineStats(
                                     predictedPlanStatistics,
                                     new HistoryBasedSourceInfo(entry.getKey().getHash(), inputTableStatistics));
@@ -174,6 +187,7 @@ public class HistoryBasedPlanStatisticsCalculator
             }
         }
 
+        log.info("HBO no meaningful stats");
         return delegateStats;
     }
 

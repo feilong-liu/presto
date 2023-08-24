@@ -220,7 +220,7 @@ public class TextRenderer
     {
         if (node.getEstimatedStats().stream().allMatch(PlanNodeStatsEstimate::isOutputRowCountUnknown) &&
                 node.getEstimatedCost().stream().allMatch(c -> c.equals(PlanCostEstimate.unknown()))) {
-            return "";
+            return "Unknown estimates";
         }
 
         StringBuilder output = new StringBuilder();

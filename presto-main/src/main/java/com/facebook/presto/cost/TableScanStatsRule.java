@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
 import com.facebook.presto.matching.Pattern;
 import com.facebook.presto.metadata.Metadata;
@@ -36,6 +37,7 @@ import static java.util.Objects.requireNonNull;
 public class TableScanStatsRule
         extends SimpleStatsRule<TableScanNode>
 {
+    private static final Logger log = Logger.get(TableScanStatsRule.class);
     private static final Pattern<TableScanNode> PATTERN = tableScan();
 
     private final Metadata metadata;
@@ -59,6 +61,9 @@ public class TableScanStatsRule
         Constraint<ColumnHandle> constraint = new Constraint<>(node.getCurrentConstraint());
 
         TableStatistics tableStatistics = metadata.getTableStatistics(session, node.getTable(), ImmutableList.copyOf(node.getAssignments().values()), constraint);
+        if (tableStatistics.equals(TableStatistics.empty())) {
+            log.error("get empty tableStatistics");
+        }
         Map<VariableReferenceExpression, VariableStatsEstimate> outputVariableStats = new HashMap<>();
 
         for (Map.Entry<VariableReferenceExpression, ColumnHandle> entry : node.getAssignments().entrySet()) {

@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql.planner.optimizations;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
 import com.facebook.presto.cost.StatsCalculator;
 import com.facebook.presto.spi.VariableAllocator;
@@ -50,6 +51,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class HistoricalStatisticsEquivalentPlanMarkingOptimizer
         implements PlanOptimizer
 {
+    private static final Logger log = Logger.get(HistoricalStatisticsEquivalentPlanMarkingOptimizer.class);
     private static final Set<Class<? extends PlanNode>> LIMITING_NODES =
             ImmutableSet.of(TopNNode.class, LimitNode.class, DistinctLimitNode.class, TopNRowNumberNode.class);
     private static final List<Class<? extends PlanNode>> PRECOMPUTE_PLAN_NODES = ImmutableList.of(JoinNode.class, SemiJoinNode.class, AggregationNode.class);
@@ -126,6 +128,7 @@ public class HistoricalStatisticsEquivalentPlanMarkingOptimizer
             logOptimizerFailure(session);
             return plan;
         }
+        log.info("HBO optimizer succeeds");
         return newPlan;
     }
 

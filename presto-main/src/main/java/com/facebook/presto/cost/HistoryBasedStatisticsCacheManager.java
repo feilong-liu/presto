@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.spi.QueryId;
 import com.facebook.presto.spi.plan.PlanNodeWithHash;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatistics;
@@ -35,9 +36,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static com.facebook.presto.spi.statistics.HistoricalPlanStatistics.empty;
+import static java.lang.String.format;
 
 public class HistoryBasedStatisticsCacheManager
 {
+    private static final Logger log = Logger.get(HistoryBasedStatisticsCacheManager.class);
     // Cache historical statistics of plan node.
     private final Map<QueryId, LoadingCache<PlanNodeWithHash, HistoricalPlanStatistics>> statisticsCache = new ConcurrentHashMap<>();
 
@@ -74,7 +77,13 @@ public class HistoryBasedStatisticsCacheManager
                             return emptyResult;
                         }
                         Map<PlanNodeWithHash, HistoricalPlanStatistics> statistics = new HashMap<>(historyBasedPlanStatisticsProvider.get().getStats(ImmutableList.copyOf(keys), timeoutInMilliSeconds));
+                        for (Map.Entry<PlanNodeWithHash, HistoricalPlanStatistics> statisticsEntry : statistics.entrySet()) {
+                            if (statisticsEntry.getValue().equals(empty())) {
+                                log.info(format("HBO hash %s stats empty", statisticsEntry.getKey()));
+                            }
+                        }
                         if (statistics.isEmpty()) {
+                            log.info(format("HBO queryId %s invalid", queryId));
                             invalidQueryId.add(queryId);
                         }
                         // loadAll excepts all keys to be written
