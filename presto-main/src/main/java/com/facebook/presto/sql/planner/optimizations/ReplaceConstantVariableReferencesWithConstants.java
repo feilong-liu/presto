@@ -282,10 +282,17 @@ public class ReplaceConstantVariableReferencesWithConstants
             if (node.getGroupingSetCount() != 1) {
                 return new PlanNodeWithConstant(node.replaceChildren(ImmutableList.of(rewrittenChild.getPlanNode())), ImmutableMap.of());
             }
-            Map<VariableReferenceExpression, ConstantExpression> constantGroupByKeys = rewrittenChild.getConstantExpressionMap().entrySet().stream()
-                    .filter(x -> node.getGroupingKeys().contains(x.getKey())).collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
+            Map<VariableReferenceExpression, ConstantExpression> constantExpressionMap = rewrittenChild.getConstantExpressionMap();
+            if (!constantExpressionMap.isEmpty()) {
+                Assignments.Builder assignmentsBuilder = Assignments.builder();
+                assignmentsBuilder.putAll(rewrittenChild.getPlanNode().getOutputVariables().stream().collect(toImmutableMap(identity(), x -> constantExpressionMap.containsKey(x) ? constantExpressionMap.get(x) : x)));
+                ProjectNode newChild = new ProjectNode(idAllocator.getNextId(), rewrittenChild.getPlanNode(), assignmentsBuilder.build());
+                Map<VariableReferenceExpression, ConstantExpression> constantGroupByKeys = constantExpressionMap.entrySet().stream()
+                        .filter(x -> node.getGroupingKeys().contains(x.getKey())).collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
+                return new PlanNodeWithConstant(node.replaceChildren(ImmutableList.of(newChild)), constantGroupByKeys);
+            }
 
-            return new PlanNodeWithConstant(node.replaceChildren(ImmutableList.of(rewrittenChild.getPlanNode())), constantGroupByKeys);
+            return new PlanNodeWithConstant(node.replaceChildren(ImmutableList.of(rewrittenChild.getPlanNode())), ImmutableMap.of());
         }
 
         @Override
