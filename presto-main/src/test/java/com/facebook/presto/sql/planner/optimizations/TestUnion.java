@@ -109,7 +109,7 @@ public class TestUnion
                 .where(TestUnion::isRemoteExchange)
                 .findAll();
 
-        assertEquals(remotes.size(), 2, "There should be exactly two RemoteExchanges");
+        assertEquals(remotes.size(), 3, "There should be exactly three RemoteExchanges");
         assertEquals(((ExchangeNode) remotes.get(0)).getType(), GATHER);
         assertEquals(((ExchangeNode) remotes.get(1)).getType(), REPARTITION);
     }

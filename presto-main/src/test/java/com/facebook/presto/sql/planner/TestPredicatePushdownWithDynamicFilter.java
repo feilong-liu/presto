@@ -22,6 +22,7 @@ import org.testng.annotations.Test;
 import static com.facebook.presto.SystemSessionProperties.ENABLE_DYNAMIC_FILTERING;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.anyTree;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.equiJoinClause;
+import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.expression;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.filter;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.join;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.node;
@@ -85,7 +86,7 @@ public class TestPredicatePushdownWithDynamicFilter
                 anyTree(
                         semiJoin(
                                 "LINE_ORDER_KEY",
-                                "ORDERS_ORDER_KEY",
+                                "expr_6",
                                 "SEMI_JOIN_RESULT",
                                 project(
                                         node(
@@ -96,9 +97,11 @@ public class TestPredicatePushdownWithDynamicFilter
                                 node(
                                         ExchangeNode.class,
                                         project(
-                                                node(
-                                                        FilterNode.class,
-                                                        tableScan("orders", ImmutableMap.of("ORDERS_ORDER_KEY", "orderkey"))))))));
+                                                project(
+                                                        ImmutableMap.of("expr_6", expression("2")),
+                                                        node(
+                                                                FilterNode.class,
+                                                                tableScan("orders", ImmutableMap.of("ORDERS_ORDER_KEY", "orderkey")))))))));
     }
 
     @Override

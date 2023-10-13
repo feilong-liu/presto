@@ -157,15 +157,17 @@ public class TestPredicatePushdown
     {
         assertPlan("SELECT quantity FROM (SELECT * FROM lineitem WHERE orderkey IN (SELECT orderkey FROM orders WHERE orderkey = 2))",
                 anyTree(
-                        semiJoin("LINE_ORDER_KEY", "ORDERS_ORDER_KEY", "SEMI_JOIN_RESULT",
+                        semiJoin("LINE_ORDER_KEY", "expr_6", "SEMI_JOIN_RESULT",
                                 anyTree(
                                         filter("LINE_ORDER_KEY = BIGINT '2'",
                                                 tableScan("lineitem", ImmutableMap.of(
                                                         "LINE_ORDER_KEY", "orderkey",
                                                         "LINE_QUANTITY", "quantity")))),
                                 anyTree(
-                                        filter("ORDERS_ORDER_KEY = BIGINT '2'",
-                                                tableScan("orders", ImmutableMap.of("ORDERS_ORDER_KEY", "orderkey")))))));
+                                        project(
+                                                ImmutableMap.of("expr_6", expression("2")),
+                                                filter("ORDERS_ORDER_KEY = BIGINT '2'",
+                                                        tableScan("orders", ImmutableMap.of("ORDERS_ORDER_KEY", "orderkey"))))))));
     }
 
     @Test
@@ -266,7 +268,9 @@ public class TestPredicatePushdown
                 // predicate matches exactly single partition, no FilterNode needed
                 output(
                         exchange(
-                                tableScan("orders"))),
+                                project(
+                                        ImmutableMap.of("expr_2", expression("'O'")),
+                                        tableScan("orders")))),
                 allOptimizers);
 
         assertPlan(

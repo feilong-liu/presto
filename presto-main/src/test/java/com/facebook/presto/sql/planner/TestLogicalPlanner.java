@@ -441,11 +441,13 @@ public class TestLogicalPlanner
                 anyTree(
                         markDistinct(
                                 "is_distinct",
-                                ImmutableList.of("orderstatus"),
+                                ImmutableList.of("orderstatus_35"),
                                 "hash",
                                 anyTree(
-                                        project(ImmutableMap.of("hash", expression("combine_hash(bigint '0', coalesce(\"$operator$hash_code\"(orderstatus), 0))")),
-                                                tableScan("orders", ImmutableMap.of("orderstatus", "orderstatus")))))));
+                                        project(ImmutableMap.of("hash", expression("combine_hash(bigint '0', coalesce(\"$operator$hash_code\"(orderstatus_35), 0))")),
+                                                project(
+                                                        ImmutableMap.of("orderstatus_35", expression("'F'")),
+                                                tableScan("orders", ImmutableMap.of())))))));
     }
 
     @Test
@@ -701,9 +703,11 @@ public class TestLogicalPlanner
                 "SELECT orderkey FROM orders WHERE 3 = (SELECT orderkey)",
                 OPTIMIZED,
                 any(
-                        filter(
-                                "X = BIGINT '3'",
-                                tableScan("orders", ImmutableMap.of("X", "orderkey")))));
+                        project(
+                                ImmutableMap.of("X", expression("3")),
+                                filter(
+                                        "X = BIGINT '3'",
+                                        tableScan("orders", ImmutableMap.of("X", "orderkey"))))));
     }
 
     @Test
@@ -926,11 +930,13 @@ public class TestLogicalPlanner
         assertPlan(
                 "SELECT orderkey FROM orders WHERE orderkey=5",
                 output(
+                        project(
+                                ImmutableMap.of("expr_2", expression("5")),
                         filter("orderkey = BIGINT '5'",
                                 constrainedTableScanWithTableLayout(
                                         "orders",
                                         ImmutableMap.of(),
-                                        ImmutableMap.of("orderkey", "orderkey")))));
+                                        ImmutableMap.of("orderkey", "orderkey"))))));
         assertPlan(
                 "SELECT orderkey FROM orders WHERE orderstatus='F'",
                 output(
@@ -1108,15 +1114,15 @@ public class TestLogicalPlanner
                         "AND l.comment = p.comment " +
                         "WHERE l.comment = '42'",
                 anyTree(
-                        join(INNER, ImmutableList.of(equiJoinClause("l_suppkey", "p_suppkey")),
-                                anyTree(
-                                        filter(
-                                                "l_comment = '42'",
-                                                tableScan("lineitem", ImmutableMap.of("l_suppkey", "suppkey", "l_comment", "comment")))),
+                        join(INNER, ImmutableList.of(equiJoinClause("p_suppkey", "l_suppkey")),
                                 anyTree(
                                         filter(
                                                 "p_comment = '42' ",
-                                                tableScan("partsupp", ImmutableMap.of("p_suppkey", "suppkey", "p_partkey", "partkey", "p_comment", "comment")))))));
+                                                tableScan("partsupp", ImmutableMap.of("p_suppkey", "suppkey", "p_partkey", "partkey", "p_comment", "comment")))),
+                                anyTree(
+                                        filter(
+                                                "l_comment = '42'",
+                                                tableScan("lineitem", ImmutableMap.of("l_suppkey", "suppkey", "l_comment", "comment")))))));
     }
 
     @Test

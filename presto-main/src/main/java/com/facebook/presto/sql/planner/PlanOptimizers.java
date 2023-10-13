@@ -122,6 +122,8 @@ import com.facebook.presto.sql.planner.iterative.rule.ScaledWriterRule;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyCardinalityMap;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyCountOverConstant;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyRowExpressions;
+import com.facebook.presto.sql.planner.iterative.rule.SimplifySortWithConstantInput;
+import com.facebook.presto.sql.planner.iterative.rule.SimplifyTopNWithConstantInput;
 import com.facebook.presto.sql.planner.iterative.rule.SingleDistinctAggregationToGroupBy;
 import com.facebook.presto.sql.planner.iterative.rule.TransformCorrelatedInPredicateToJoin;
 import com.facebook.presto.sql.planner.iterative.rule.TransformCorrelatedLateralJoinToJoin;
@@ -157,6 +159,7 @@ import com.facebook.presto.sql.planner.optimizations.PruneUnreferencedOutputs;
 import com.facebook.presto.sql.planner.optimizations.PushdownSubfields;
 import com.facebook.presto.sql.planner.optimizations.RandomizeNullKeyInOuterJoin;
 import com.facebook.presto.sql.planner.optimizations.RemoveRedundantDistinctAggregation;
+import com.facebook.presto.sql.planner.optimizations.ReplaceConstantVariableReferencesWithConstants;
 import com.facebook.presto.sql.planner.optimizations.ReplicateSemiJoinInDelete;
 import com.facebook.presto.sql.planner.optimizations.RewriteIfOverAggregation;
 import com.facebook.presto.sql.planner.optimizations.SetFlatteningOptimizer;
@@ -403,6 +406,19 @@ public class PlanOptimizers
                                 new ImplementOffset(metadata.getFunctionAndTypeManager()))),
                 simplifyRowExpressionOptimizer,
                 new UnaliasSymbolReferences(metadata.getFunctionAndTypeManager()),
+                new ReplaceConstantVariableReferencesWithConstants(metadata.getFunctionAndTypeManager()),
+                simplifyRowExpressionOptimizer,
+                new ReplaceConstantVariableReferencesWithConstants(metadata.getFunctionAndTypeManager()),
+                new IterativeOptimizer(
+                        metadata,
+                        ruleStats,
+                        statsCalculator,
+                        estimatedExchangesCostCalculator,
+                        ImmutableSet.of(
+                                new SimplifySortWithConstantInput(),
+                                new SimplifyTopNWithConstantInput(),
+                                new PullConstantsAboveGroupBy())),
+                inlineProjections,
                 new IterativeOptimizer(
                         metadata,
                         ruleStats,
@@ -465,14 +481,7 @@ public class PlanOptimizers
                         ruleStats,
                         statsCalculator,
                         estimatedExchangesCostCalculator,
-                        ImmutableSet.of(new RemoveRedundantCastToVarcharInJoinClause(metadata.getFunctionAndTypeManager()))),
-                new IterativeOptimizer(
-                        metadata,
-                        ruleStats,
-                        statsCalculator,
-                        estimatedExchangesCostCalculator,
-                        ImmutableSet.of(
-                                new PullConstantsAboveGroupBy())));
+                        ImmutableSet.of(new RemoveRedundantCastToVarcharInJoinClause(metadata.getFunctionAndTypeManager()))));
 
         builder.add(new IterativeOptimizer(
                 metadata,
@@ -548,9 +557,23 @@ public class PlanOptimizers
                                 new AddNotNullFiltersToJoinNode(metadata.getFunctionAndTypeManager()))),
                 inlineProjections,
                 simplifyRowExpressionOptimizer, // Re-run the SimplifyExpressions to simplify any recomposed expressions from other optimizations
+                inlineProjections,
                 projectionPushDown,
                 new PayloadJoinOptimizer(metadata),
                 new UnaliasSymbolReferences(metadata.getFunctionAndTypeManager()), // Run again because predicate pushdown and projection pushdown might add more projections
+                new ReplaceConstantVariableReferencesWithConstants(metadata.getFunctionAndTypeManager()),
+                simplifyRowExpressionOptimizer,
+                new ReplaceConstantVariableReferencesWithConstants(metadata.getFunctionAndTypeManager()),
+                new IterativeOptimizer(
+                        metadata,
+                        ruleStats,
+                        statsCalculator,
+                        estimatedExchangesCostCalculator,
+                        ImmutableSet.of(
+                                new SimplifySortWithConstantInput(),
+                                new SimplifyTopNWithConstantInput(),
+                                new PullConstantsAboveGroupBy())),
+                inlineProjections,
                 new PruneUnreferencedOutputs(), // Make sure to run this before index join. Filtered projections may not have all the columns.
                 new IndexJoinOptimizer(metadata), // Run this after projections and filters have been fully simplified and pushed down
                 new IterativeOptimizer(
