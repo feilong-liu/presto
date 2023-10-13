@@ -295,6 +295,7 @@ public final class SystemSessionProperties
     public static final String INFER_INEQUALITY_PREDICATES = "infer_inequality_predicates";
     public static final String ENABLE_HISTORY_BASED_SCALED_WRITER = "enable_history_based_scaled_writer";
     public static final String REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN = "remove_redundant_cast_to_varchar_in_join";
+    public static final String REWRITE_EXPRESSION_WITH_CONSTANT_EXPRESSION = "rewrite_expression_with_constant_expression";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "native_simplified_expression_evaluation_enabled";
@@ -1775,6 +1776,11 @@ public final class SystemSessionProperties
                         REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN,
                         "If both left and right side of join clause are varchar cast from int/bigint, remove the cast here",
                         featuresConfig.isRemoveRedundantCastToVarcharInJoin(),
+                        false),
+                booleanProperty(
+                        REWRITE_EXPRESSION_WITH_CONSTANT_EXPRESSION,
+                        "Rewrite left join with is null check to semi join",
+                        featuresConfig.isRewriteExpressionWithConstantVariable(),
                         false));
     }
 
@@ -2958,5 +2964,10 @@ public final class SystemSessionProperties
     public static boolean isRemoveRedundantCastToVarcharInJoinEnabled(Session session)
     {
         return session.getSystemProperty(REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN, Boolean.class);
+    }
+
+    public static boolean isRewriteExpressionWithConstantEnabled(Session session)
+    {
+        return session.getSystemProperty(REWRITE_EXPRESSION_WITH_CONSTANT_EXPRESSION, Boolean.class);
     }
 }
