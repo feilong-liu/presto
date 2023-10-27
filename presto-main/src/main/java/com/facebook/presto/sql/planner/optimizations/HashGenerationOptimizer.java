@@ -65,6 +65,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
+import static com.facebook.presto.SystemSessionProperties.skipHashGenerationForJoinWithTableScanInput;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.plan.ProjectNode.Locality.LOCAL;
 import static com.facebook.presto.spi.plan.ProjectNode.Locality.REMOTE;
@@ -121,7 +122,7 @@ public class HashGenerationOptimizer
         requireNonNull(variableAllocator, "variableAllocator is null");
         requireNonNull(idAllocator, "idAllocator is null");
         if (isEnabled(session)) {
-            PlanWithProperties result = new Rewriter(idAllocator, variableAllocator, functionAndTypeManager).accept(plan, new HashComputationSet());
+            PlanWithProperties result = new Rewriter(idAllocator, variableAllocator, functionAndTypeManager, session).accept(plan, new HashComputationSet());
             return PlanOptimizerResult.optimizerResult(result.getNode(), true);
         }
         return PlanOptimizerResult.optimizerResult(plan, false);
@@ -133,12 +134,14 @@ public class HashGenerationOptimizer
         private final PlanNodeIdAllocator idAllocator;
         private final VariableAllocator variableAllocator;
         private final FunctionAndTypeManager functionAndTypeManager;
+        private final Session session;
 
-        private Rewriter(PlanNodeIdAllocator idAllocator, VariableAllocator variableAllocator, FunctionAndTypeManager functionAndTypeManager)
+        private Rewriter(PlanNodeIdAllocator idAllocator, VariableAllocator variableAllocator, FunctionAndTypeManager functionAndTypeManager, Session session)
         {
             this.idAllocator = requireNonNull(idAllocator, "idAllocator is null");
             this.variableAllocator = requireNonNull(variableAllocator, "variableAllocator is null");
             this.functionAndTypeManager = requireNonNull(functionAndTypeManager, "functionManager is null");
+            this.session = requireNonNull(session, "session is null");
         }
 
         @Override
@@ -314,6 +317,11 @@ public class HashGenerationOptimizer
                     child.getHashVariables());
         }
 
+        private boolean skipHashComputeForJoinInput(PlanNode node, Optional<HashComputation> hashComputation, HashComputationSet parentPreference)
+        {
+            return hashComputation.isPresent() && hashComputation.get().isSingleBigIntVariable() && !parentPreference.getHashes().contains(hashComputation.get());
+        }
+
         @Override
         public PlanWithProperties visitJoin(JoinNode node, HashComputationSet parentPreference)
         {
@@ -332,13 +340,37 @@ public class HashGenerationOptimizer
             // join does not pass through preferred hash variables since they take more memory and since
             // the join node filters, may take more compute
             Optional<HashComputation> leftHashComputation = computeHash(Lists.transform(clauses, JoinNode.EquiJoinClause::getLeft), functionAndTypeManager);
-            PlanWithProperties left = planAndEnforce(node.getLeft(), new HashComputationSet(leftHashComputation), true, new HashComputationSet(leftHashComputation));
-            VariableReferenceExpression leftHashVariable = left.getRequiredHashVariable(leftHashComputation.get());
+            PlanWithProperties left;
+            Optional<VariableReferenceExpression> leftHashVariable = Optional.empty();
+            if (skipHashGenerationForJoinWithTableScanInput(session) && skipHashComputeForJoinInput(node.getLeft(), leftHashComputation, parentPreference)) {
+                // we do an opportunistic hash optimization here, we do not require pre-computation for hash key, but if the child produced the hash for the join key, we use it
+                left = planAndEnforce(node.getLeft(), new HashComputationSet(), false, new HashComputationSet());
+                if (leftHashComputation.isPresent() && left.getHashVariables().containsKey(leftHashComputation.get())) {
+                    left = enforce(left, new HashComputationSet(leftHashComputation));
+                    leftHashVariable = Optional.of(left.getRequiredHashVariable(leftHashComputation.get()));
+                }
+            }
+            else {
+                left = planAndEnforce(node.getLeft(), new HashComputationSet(leftHashComputation), true, new HashComputationSet(leftHashComputation));
+                leftHashVariable = Optional.of(left.getRequiredHashVariable(leftHashComputation.get()));
+            }
 
             Optional<HashComputation> rightHashComputation = computeHash(Lists.transform(clauses, JoinNode.EquiJoinClause::getRight), functionAndTypeManager);
-            // drop undesired hash variables from build to save memory
-            PlanWithProperties right = planAndEnforce(node.getRight(), new HashComputationSet(rightHashComputation), true, new HashComputationSet(rightHashComputation));
-            VariableReferenceExpression rightHashVariable = right.getRequiredHashVariable(rightHashComputation.get());
+            PlanWithProperties right;
+            Optional<VariableReferenceExpression> rightHashVariable = Optional.empty();
+            if (skipHashGenerationForJoinWithTableScanInput(session) && skipHashComputeForJoinInput(node.getRight(), rightHashComputation, parentPreference)) {
+                // we do an opportunistic hash optimization here, we do not require pre-computation for hash key, but if the child produced the hash for the join key, we use it
+                right = planAndEnforce(node.getRight(), new HashComputationSet(), false, new HashComputationSet());
+                if (rightHashComputation.isPresent() && right.getHashVariables().containsKey(rightHashComputation.get())) {
+                    right = enforce(right, new HashComputationSet(rightHashComputation));
+                    rightHashVariable = Optional.of(right.getRequiredHashVariable(rightHashComputation.get()));
+                }
+            }
+            else {
+                // drop undesired hash variables from build to save memory
+                right = planAndEnforce(node.getRight(), new HashComputationSet(rightHashComputation), true, new HashComputationSet(rightHashComputation));
+                rightHashVariable = Optional.of(right.getRequiredHashVariable(rightHashComputation.get()));
+            }
 
             // build map of all hash variables
             // NOTE: Full outer join doesn't use hash variables
@@ -350,7 +382,7 @@ public class HashGenerationOptimizer
                 allHashVariables.putAll(right.getHashVariables());
             }
 
-            return buildJoinNodeWithPreferredHashes(node, left, right, allHashVariables, parentPreference, Optional.of(leftHashVariable), Optional.of(rightHashVariable));
+            return buildJoinNodeWithPreferredHashes(node, left, right, allHashVariables, parentPreference, leftHashVariable, rightHashVariable);
         }
 
         private PlanWithProperties buildJoinNodeWithPreferredHashes(
@@ -926,6 +958,11 @@ public class HashGenerationOptimizer
         public boolean canComputeWith(Set<VariableReferenceExpression> availableFields)
         {
             return availableFields.containsAll(fields);
+        }
+
+        public boolean isSingleBigIntVariable()
+        {
+            return fields.size() == 1 && Iterables.getOnlyElement(fields).getType().equals(BIGINT);
         }
 
         private RowExpression getHashExpression()

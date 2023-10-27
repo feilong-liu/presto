@@ -285,6 +285,7 @@ public class FeaturesConfig
     private boolean useHBOForScaledWriters;
 
     private boolean removeRedundantCastToVarcharInJoin = true;
+    private boolean skipHashGenerationForJoinWithTableScanInput;
 
     public enum PartitioningPrecisionStrategy
     {
@@ -2843,6 +2844,19 @@ public class FeaturesConfig
     public FeaturesConfig setHandleComplexEquiJoins(boolean handleComplexEquiJoins)
     {
         this.handleComplexEquiJoins = handleComplexEquiJoins;
+        return this;
+    }
+
+    public boolean isSkipHashGenerationForJoinWithTableScanInput()
+    {
+        return skipHashGenerationForJoinWithTableScanInput;
+    }
+
+    @Config("optimizer.skip-hash-generation-for-join-with-table-scan-input")
+    @ConfigDescription("Skip hash generation for join, when input is table scan node")
+    public FeaturesConfig setSkipHashGenerationForJoinWithTableScanInput(boolean skipHashGenerationForJoinWithTableScanInput)
+    {
+        this.skipHashGenerationForJoinWithTableScanInput = skipHashGenerationForJoinWithTableScanInput;
         return this;
     }
 }
