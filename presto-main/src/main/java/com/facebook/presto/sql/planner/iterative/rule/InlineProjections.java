@@ -24,6 +24,7 @@ import com.facebook.presto.spi.plan.ProjectNode;
 import com.facebook.presto.spi.relation.CallExpression;
 import com.facebook.presto.spi.relation.ConstantExpression;
 import com.facebook.presto.spi.relation.RowExpression;
+import com.facebook.presto.spi.relation.SpecialFormExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.sql.planner.RowExpressionVariableInliner;
 import com.facebook.presto.sql.planner.TypeProvider;
@@ -165,9 +166,12 @@ public class InlineProjections
                 .flatMap(expression -> extractTryArguments(expression).stream())
                 .collect(toSet());
 
+        Set<VariableReferenceExpression> bindArguments = parent.getAssignments().getExpressions().stream().flatMap(expression -> extractBindArguments(expression).stream()).collect(toSet());
+
         Set<VariableReferenceExpression> singletons = dependencies.entrySet().stream()
                 .filter(entry -> entry.getValue() == 1) // reference appears just once across all expressions in parent project node
                 .filter(entry -> !tryArguments.contains(entry.getKey())) // they are not inputs to TRY. Otherwise, inlining might change semantics
+                .filter(entry -> !bindArguments.contains(entry.getKey()))
                 .filter(entry -> !isIdentity(child.getAssignments(), entry.getKey())) // skip identities, otherwise, this rule will keep firing forever
                 .map(Map.Entry::getKey)
                 .collect(toSet());
@@ -187,6 +191,25 @@ public class InlineProjections
                     context.addAll(extractAll(call));
                 }
                 return super.visitCall(call, context);
+            }
+        }, builder);
+        return builder.build();
+    }
+
+    private Set<VariableReferenceExpression> extractBindArguments(RowExpression expression)
+    {
+        ImmutableSet.Builder<VariableReferenceExpression> builder = ImmutableSet.builder();
+        expression.accept(new DefaultRowExpressionTraversalVisitor<ImmutableSet.Builder<VariableReferenceExpression>>()
+        {
+            @Override
+            public Void visitSpecialForm(SpecialFormExpression specialForm, ImmutableSet.Builder<VariableReferenceExpression> context)
+            {
+                if (specialForm.getForm().equals(SpecialFormExpression.Form.BIND)) {
+                    for (int i = 0; i < specialForm.getArguments().size() - 1; ++i) {
+                        context.addAll(extractAll(specialForm.getArguments().get(i)));
+                    }
+                }
+                return super.visitSpecialForm(specialForm, context);
             }
         }, builder);
         return builder.build();
