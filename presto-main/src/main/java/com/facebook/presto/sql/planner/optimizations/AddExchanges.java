@@ -16,6 +16,10 @@ package com.facebook.presto.sql.planner.optimizations;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.connector.system.GlobalSystemConnector;
+import com.facebook.presto.cost.CachingStatsProvider;
+import com.facebook.presto.cost.PlanNodeStatsEstimate;
+import com.facebook.presto.cost.StatsCalculator;
+import com.facebook.presto.cost.StatsProvider;
 import com.facebook.presto.execution.QueryManagerConfig.ExchangeMaterializationStrategy;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.spi.ConnectorId;
@@ -45,6 +49,7 @@ import com.facebook.presto.spi.plan.UnionNode;
 import com.facebook.presto.spi.plan.ValuesNode;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.spi.statistics.HistoryBasedSourceInfo;
 import com.facebook.presto.sql.analyzer.FeaturesConfig.AggregationPartitioningMergingStrategy;
 import com.facebook.presto.sql.analyzer.FeaturesConfig.PartialMergePushdownStrategy;
 import com.facebook.presto.sql.parser.SqlParser;
@@ -101,6 +106,8 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.facebook.presto.SystemSessionProperties.getAggregationPartitioningMergingStrategy;
+import static com.facebook.presto.SystemSessionProperties.getExchangeMaterializationOutputSizeLimit;
+import static com.facebook.presto.SystemSessionProperties.getExchangeMaterializationRowCountLimit;
 import static com.facebook.presto.SystemSessionProperties.getExchangeMaterializationStrategy;
 import static com.facebook.presto.SystemSessionProperties.getHashPartitionCount;
 import static com.facebook.presto.SystemSessionProperties.getPartialMergePushdownStrategy;
@@ -161,18 +168,21 @@ public class AddExchanges
     private final SqlParser parser;
     private final Metadata metadata;
     private final PartitioningProviderManager partitioningProviderManager;
+    private final StatsCalculator statsCalculator;
 
-    public AddExchanges(Metadata metadata, SqlParser parser, PartitioningProviderManager partitioningProviderManager)
+    public AddExchanges(Metadata metadata, SqlParser parser, PartitioningProviderManager partitioningProviderManager, StatsCalculator statsCalculator)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
         this.parser = requireNonNull(parser, "parser is null");
         this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
+        this.statsCalculator = requireNonNull(statsCalculator, "statsCalculator is null");
     }
 
     @Override
     public PlanOptimizerResult optimize(PlanNode plan, Session session, TypeProvider types, VariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator, WarningCollector warningCollector)
     {
-        PlanWithProperties result = new Rewriter(idAllocator, variableAllocator, session, partitioningProviderManager).accept(plan, PreferredProperties.any());
+        StatsProvider statsProvider = new CachingStatsProvider(statsCalculator, session, types);
+        PlanWithProperties result = new Rewriter(idAllocator, variableAllocator, session, partitioningProviderManager, statsProvider).accept(plan, PreferredProperties.any());
         boolean optimizerTriggered = PlanNodeSearcher.searchFrom(result.getNode()).where(node -> node instanceof ExchangeNode && ((ExchangeNode) node).getScope().isRemote()).findFirst().isPresent();
         return PlanOptimizerResult.optimizerResult(result.getNode(), optimizerTriggered);
     }
@@ -194,12 +204,16 @@ public class AddExchanges
         private final int hashPartitionCount;
         private final ExchangeMaterializationStrategy exchangeMaterializationStrategy;
         private final PartitioningProviderManager partitioningProviderManager;
+        private final StatsProvider statsProvider;
+        private final double materializationRowCountLimit;
+        private final double materializationOutputSizeLimit;
 
         public Rewriter(
                 PlanNodeIdAllocator idAllocator,
                 VariableAllocator variableAllocator,
                 Session session,
-                PartitioningProviderManager partitioningProviderManager)
+                PartitioningProviderManager partitioningProviderManager,
+                StatsProvider statsProvider)
         {
             this.idAllocator = idAllocator;
             this.variableAllocator = variableAllocator;
@@ -215,6 +229,9 @@ public class AddExchanges
             this.hashPartitionCount = getHashPartitionCount(session);
             this.exchangeMaterializationStrategy = getExchangeMaterializationStrategy(session);
             this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
+            this.statsProvider = requireNonNull(statsProvider, "statsProvider is null");
+            this.materializationRowCountLimit = getExchangeMaterializationRowCountLimit(session);
+            this.materializationOutputSizeLimit = getExchangeMaterializationOutputSizeLimit(session);
         }
 
         @Override
@@ -1508,6 +1525,14 @@ public class AddExchanges
                     return REMOTE_MATERIALIZED;
                 case NONE:
                     return REMOTE_STREAMING;
+                case COST_BASED:
+                    PlanNodeStatsEstimate statsEstimate = statsProvider.getStats(exchangeSource);
+                    if (!Double.isNaN(statsEstimate.getOutputRowCount()) && !Double.isNaN(statsEstimate.getOutputSizeInBytes())
+                            && statsEstimate.getOutputRowCount() < materializationRowCountLimit && statsEstimate.getOutputSizeInBytes() < materializationOutputSizeLimit
+                            && statsEstimate.getSourceInfo() instanceof HistoryBasedSourceInfo) {
+                        return REMOTE_STREAMING;
+                    }
+                    return REMOTE_MATERIALIZED;
                 default:
                     throw new IllegalStateException("Unexpected exchange materialization strategy: " + exchangeMaterializationStrategy);
             }

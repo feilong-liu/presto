@@ -811,7 +811,7 @@ public class PlanOptimizers
                             ImmutableSet.of(new PushTableWriteThroughUnion()))); // Must run before AddExchanges
             builder.add(new CteProjectionAndPredicatePushDown(metadata)); // must run before PhysicalCteOptimizer
             builder.add(new PhysicalCteOptimizer(metadata)); // Must run before AddExchanges
-            builder.add(new StatsRecordingPlanOptimizer(optimizerStats, new AddExchanges(metadata, sqlParser, partitioningProviderManager)));
+            builder.add(new StatsRecordingPlanOptimizer(optimizerStats, new AddExchanges(metadata, sqlParser, partitioningProviderManager, statsCalculator)));
         }
 
         //noinspection UnusedAssignment

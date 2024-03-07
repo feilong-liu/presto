@@ -742,5 +742,6 @@ public class QueryManagerConfig
     {
         NONE,
         ALL,
+        COST_BASED,
     }
 }

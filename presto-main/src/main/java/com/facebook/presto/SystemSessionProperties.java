@@ -99,6 +99,8 @@ public final class SystemSessionProperties
 
     public static final String CTE_PARTITIONING_PROVIDER_CATALOG = "cte_partitioning_provider_catalog";
     public static final String EXCHANGE_MATERIALIZATION_STRATEGY = "exchange_materialization_strategy";
+    public static final String EXCHANGE_MATERIALIZATION_ROW_COUNT_LIMIT = "exchange_materialization_row_count_limit";
+    public static final String EXCHANGE_MATERIALIZATION_OUTPUT_SIZE_LIMIT = "exchange_materialization_output_size_limit";
     public static final String USE_STREAMING_EXCHANGE_FOR_MARK_DISTINCT = "use_stream_exchange_for_mark_distinct";
     public static final String GROUPED_EXECUTION = "grouped_execution";
     public static final String RECOVERABLE_GROUPED_EXECUTION = "recoverable_grouped_execution";
@@ -455,6 +457,16 @@ public final class SystemSessionProperties
                         false,
                         value -> ExchangeMaterializationStrategy.valueOf(((String) value).toUpperCase()),
                         ExchangeMaterializationStrategy::name),
+                doubleProperty(
+                        EXCHANGE_MATERIALIZATION_ROW_COUNT_LIMIT,
+                        "When EXCHANGE_MATERIALIZATION_STRATEGY set to cost based, materialize exchange only when number of rows in exchange source output exceeds this limit",
+                        1000000.0,
+                        false),
+                doubleProperty(
+                        EXCHANGE_MATERIALIZATION_OUTPUT_SIZE_LIMIT,
+                        "When EXCHANGE_MATERIALIZATION_STRATEGY set to cost based, materialize exchange only when data size in Bytes of exchange source output exceeds this limit",
+                        1000000000.0,
+                        false),
                 booleanProperty(
                         USE_STREAMING_EXCHANGE_FOR_MARK_DISTINCT,
                         "Use streaming instead of materialization for mark distinct with materialized exchange enabled",
@@ -2038,6 +2050,16 @@ public final class SystemSessionProperties
     public static ExchangeMaterializationStrategy getExchangeMaterializationStrategy(Session session)
     {
         return session.getSystemProperty(EXCHANGE_MATERIALIZATION_STRATEGY, ExchangeMaterializationStrategy.class);
+    }
+
+    public static double getExchangeMaterializationRowCountLimit(Session session)
+    {
+        return session.getSystemProperty(EXCHANGE_MATERIALIZATION_ROW_COUNT_LIMIT, Double.class);
+    }
+
+    public static double getExchangeMaterializationOutputSizeLimit(Session session)
+    {
+        return session.getSystemProperty(EXCHANGE_MATERIALIZATION_OUTPUT_SIZE_LIMIT, Double.class);
     }
 
     public static boolean isUseStreamingExchangeForMarkDistinctEnabled(Session session)
