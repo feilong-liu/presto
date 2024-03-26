@@ -289,7 +289,7 @@ public class QueryMonitor
         Map<PlanNodeId, Map<PlanCanonicalizationStrategy, String>> planNodeIdStrategyHashMap = new HashMap<>();
         for (CanonicalPlanWithInfo canonicalPlanWithInfo : canonicalPlanWithInfos) {
             PlanCanonicalizationStrategy strategy = canonicalPlanWithInfo.getCanonicalPlan().getStrategy();
-            PlanNodeId planNodeId = canonicalPlanWithInfo.getCanonicalPlan().getPlan().getId();
+            PlanNodeId planNodeId = canonicalPlanWithInfo.getOriginalPlanNodeId();
             String hash = canonicalPlanWithInfo.getInfo().getHash();
             if (!planNodeIdStrategyHashMap.containsKey(planNodeId)) {
                 planNodeIdStrategyHashMap.put(planNodeId, new HashMap<>());

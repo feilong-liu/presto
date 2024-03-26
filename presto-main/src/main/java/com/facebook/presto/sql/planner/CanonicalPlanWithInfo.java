@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql.planner;
 
+import com.facebook.presto.spi.plan.PlanNodeId;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -24,12 +25,14 @@ public class CanonicalPlanWithInfo
 {
     private final CanonicalPlan canonicalPlan;
     private final PlanNodeCanonicalInfo info;
+    private final PlanNodeId originalPlanNodeId;
 
     @JsonCreator
-    public CanonicalPlanWithInfo(@JsonProperty("canonicalPlan") CanonicalPlan canonicalPlan, @JsonProperty("info") PlanNodeCanonicalInfo info)
+    public CanonicalPlanWithInfo(@JsonProperty("canonicalPlan") CanonicalPlan canonicalPlan, @JsonProperty("info") PlanNodeCanonicalInfo info, @JsonProperty("originalPlanNodeId") PlanNodeId originalPlanNodeId)
     {
         this.canonicalPlan = requireNonNull(canonicalPlan, "canonicalPlan is null");
         this.info = requireNonNull(info, "info is null");
+        this.originalPlanNodeId = requireNonNull(originalPlanNodeId, "originalPlanNodeId is null");
     }
 
     @JsonProperty("canonicalPlan")
@@ -44,6 +47,12 @@ public class CanonicalPlanWithInfo
         return info;
     }
 
+    @JsonProperty("originalPlanNodeId")
+    public PlanNodeId getOriginalPlanNodeId()
+    {
+        return originalPlanNodeId;
+    }
+
     @Override
     public boolean equals(Object o)
     {
@@ -54,12 +63,12 @@ public class CanonicalPlanWithInfo
             return false;
         }
         CanonicalPlanWithInfo that = (CanonicalPlanWithInfo) o;
-        return Objects.equals(canonicalPlan, that.canonicalPlan) && Objects.equals(info, that.info);
+        return Objects.equals(canonicalPlan, that.canonicalPlan) && Objects.equals(info, that.info) && Objects.equals(originalPlanNodeId, that.originalPlanNodeId);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(canonicalPlan, info);
+        return Objects.hash(canonicalPlan, info, originalPlanNodeId);
     }
 }
