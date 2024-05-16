@@ -377,6 +377,7 @@ public class AddLocalExchanges
             AggregationNode result = new AggregationNode(
                     node.getSourceLocation(),
                     node.getId(),
+                    node.getStatsEquivalentPlanNode(),
                     child.getNode(),
                     node.getAggregations(),
                     node.getGroupingSets(),

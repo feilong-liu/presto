@@ -317,6 +317,7 @@ public class PushPartialAggregationThroughExchange
         return new AggregationNode(
                 node.getSourceLocation(),
                 node.getId(),
+                node.getStatsEquivalentPlanNode(),
                 partial,
                 finalAggregation,
                 node.getGroupingSets(),

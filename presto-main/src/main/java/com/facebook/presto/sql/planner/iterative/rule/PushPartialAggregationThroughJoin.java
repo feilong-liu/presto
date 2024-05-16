@@ -167,6 +167,7 @@ public class PushPartialAggregationThroughJoin
         return new AggregationNode(
                 aggregation.getSourceLocation(),
                 aggregation.getId(),
+                aggregation.getStatsEquivalentPlanNode(),
                 source,
                 aggregation.getAggregations(),
                 singleGroupingSet(groupingKeys),

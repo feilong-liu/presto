@@ -211,6 +211,7 @@ public class HashGenerationOptimizer
                     new AggregationNode(
                             node.getSourceLocation(),
                             node.getId(),
+                            node.getStatsEquivalentPlanNode(),
                             child.getNode(),
                             node.getAggregations(),
                             node.getGroupingSets(),
