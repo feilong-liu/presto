@@ -402,6 +402,8 @@ import static com.facebook.presto.operator.scalar.ArrayTransformFunction.ARRAY_T
 import static com.facebook.presto.operator.scalar.CastFromUnknownOperator.CAST_FROM_UNKNOWN;
 import static com.facebook.presto.operator.scalar.ConcatFunction.VARBINARY_CONCAT;
 import static com.facebook.presto.operator.scalar.ConcatFunction.VARCHAR_CONCAT;
+import static com.facebook.presto.operator.scalar.FbInvokePythonUdfFunction.FB_VARBINARY_CONCAT;
+import static com.facebook.presto.operator.scalar.FbInvokePythonUdfFunction.FB_VARCHAR_CONCAT;
 import static com.facebook.presto.operator.scalar.ElementToArrayConcatFunction.ELEMENT_TO_ARRAY_CONCAT_FUNCTION;
 import static com.facebook.presto.operator.scalar.Greatest.GREATEST;
 import static com.facebook.presto.operator.scalar.IdentityCast.IDENTITY_CAST;
@@ -966,6 +968,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .aggregates(NoisyCountIfGaussianAggregation.class)
                 .functions(ROW_HASH_CODE, ROW_TO_JSON, JSON_TO_ROW, JSON_STRING_TO_ROW, ROW_DISTINCT_FROM, ROW_EQUAL, ROW_GREATER_THAN, ROW_GREATER_THAN_OR_EQUAL, ROW_LESS_THAN, ROW_LESS_THAN_OR_EQUAL, ROW_NOT_EQUAL, ROW_TO_ROW_CAST, ROW_INDETERMINATE)
                 .functions(VARCHAR_CONCAT, VARBINARY_CONCAT)
+                .functions(FB_VARCHAR_CONCAT, FB_VARBINARY_CONCAT)
                 .function(DECIMAL_TO_DECIMAL_CAST)
                 .function(castVarcharToRe2JRegexp(featuresConfig.getRe2JDfaStatesLimit(), featuresConfig.getRe2JDfaRetries()))
                 .function(castCharToRe2JRegexp(featuresConfig.getRe2JDfaStatesLimit(), featuresConfig.getRe2JDfaRetries()))
