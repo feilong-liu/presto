@@ -588,13 +588,13 @@
                     <name>!skipUI</name>
                 </property>
             </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>com.facebook.presto</groupId>
-                    <artifactId>presto-ui</artifactId>
-                    <scope>runtime</scope>
-                </dependency>
-            </dependencies>
+<!--            <dependencies>-->
+<!--                <dependency>-->
+<!--                    <groupId>com.facebook.presto</groupId>-->
+<!--                    <artifactId>presto-ui</artifactId>-->
+<!--                    <scope>runtime</scope>-->
+<!--                </dependency>-->
+<!--            </dependencies>-->
         </profile>
         <profile>
             <id>benchmarks</id>
