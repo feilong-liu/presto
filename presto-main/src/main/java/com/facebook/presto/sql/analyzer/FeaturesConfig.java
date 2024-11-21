@@ -42,6 +42,7 @@ import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinNotNullInferen
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.TaskSpillingStrategy.ORDER_BY_CREATE_TIME;
 import static com.facebook.presto.sql.tree.CreateView.Security.DEFINER;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.airlift.units.DataSize.Unit.GIGABYTE;
 import static io.airlift.units.DataSize.Unit.KILOBYTE;
 import static io.airlift.units.DataSize.Unit.MEGABYTE;
 import static java.util.Objects.requireNonNull;
@@ -106,6 +107,7 @@ public class FeaturesConfig
     private boolean redistributeWrites;
     private boolean scaleWriters = true;
     private DataSize writerMinSize = new DataSize(32, MEGABYTE);
+    private DataSize skipScaleWriterThreshold = new DataSize(32, GIGABYTE);
     private boolean optimizedScaleWriterProducerBuffer = true;
     private boolean optimizeMetadataQueries;
     private boolean optimizeMetadataQueriesIgnoreStats;
@@ -919,6 +921,20 @@ public class FeaturesConfig
     public FeaturesConfig setWriterMinSize(DataSize writerMinSize)
     {
         this.writerMinSize = writerMinSize;
+        return this;
+    }
+
+    @NotNull
+    public DataSize getSkipScaleWriterThreshold()
+    {
+        return skipScaleWriterThreshold;
+    }
+
+    @Config("skip-scale-writer-threshold")
+    @ConfigDescription("Skip scale writer when output data size exceeds the threshold")
+    public FeaturesConfig setSkipScaleWriterThreshold(DataSize skipScaleWriterThreshold)
+    {
+        this.skipScaleWriterThreshold = skipScaleWriterThreshold;
         return this;
     }
 

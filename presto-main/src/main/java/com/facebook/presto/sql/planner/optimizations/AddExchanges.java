@@ -16,6 +16,10 @@ package com.facebook.presto.sql.planner.optimizations;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.connector.system.GlobalSystemConnector;
+import com.facebook.presto.cost.CachingStatsProvider;
+import com.facebook.presto.cost.PlanNodeStatsEstimate;
+import com.facebook.presto.cost.StatsCalculator;
+import com.facebook.presto.cost.StatsProvider;
 import com.facebook.presto.execution.QueryManagerConfig.ExchangeMaterializationStrategy;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.spi.ConnectorId;
@@ -54,6 +58,7 @@ import com.facebook.presto.spi.plan.ValuesNode;
 import com.facebook.presto.spi.plan.WindowNode;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.spi.statistics.HistoryBasedSourceInfo;
 import com.facebook.presto.sql.analyzer.FeaturesConfig.AggregationPartitioningMergingStrategy;
 import com.facebook.presto.sql.analyzer.FeaturesConfig.PartialMergePushdownStrategy;
 import com.facebook.presto.sql.planner.PartitioningProviderManager;
@@ -104,6 +109,7 @@ import static com.facebook.presto.SystemSessionProperties.getExchangeMaterializa
 import static com.facebook.presto.SystemSessionProperties.getHashPartitionCount;
 import static com.facebook.presto.SystemSessionProperties.getPartialMergePushdownStrategy;
 import static com.facebook.presto.SystemSessionProperties.getPartitioningProviderCatalog;
+import static com.facebook.presto.SystemSessionProperties.getSkipScaleWriterDataSizeThreshold;
 import static com.facebook.presto.SystemSessionProperties.getTaskPartitionedWriterCount;
 import static com.facebook.presto.SystemSessionProperties.isAddPartialNodeForRowNumberWithLimit;
 import static com.facebook.presto.SystemSessionProperties.isColocatedJoinEnabled;
@@ -159,12 +165,14 @@ public class AddExchanges
         implements PlanOptimizer
 {
     private final Metadata metadata;
+    private final StatsCalculator statsCalculator;
     private final PartitioningProviderManager partitioningProviderManager;
     private final boolean nativeExecution;
 
-    public AddExchanges(Metadata metadata, PartitioningProviderManager partitioningProviderManager, boolean nativeExecution)
+    public AddExchanges(Metadata metadata, StatsCalculator statsCalculator, PartitioningProviderManager partitioningProviderManager, boolean nativeExecution)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
+        this.statsCalculator = requireNonNull(statsCalculator, "statsCalculator is null");
         this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
         this.nativeExecution = nativeExecution;
     }
@@ -194,6 +202,7 @@ public class AddExchanges
         private final int hashPartitionCount;
         private final ExchangeMaterializationStrategy exchangeMaterializationStrategy;
         private final PartitioningProviderManager partitioningProviderManager;
+        private final StatsProvider statsProvider;
         private final boolean nativeExecution;
 
         public Rewriter(
@@ -217,6 +226,7 @@ public class AddExchanges
             this.hashPartitionCount = getHashPartitionCount(session);
             this.exchangeMaterializationStrategy = getExchangeMaterializationStrategy(session);
             this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
+            this.statsProvider = new CachingStatsProvider(statsCalculator, session, types);
             this.nativeExecution = nativeExecution;
         }
 
@@ -656,7 +666,11 @@ public class AddExchanges
 
             if (!shufflePartitioningScheme.isPresent()) {
                 if (scaleWriters) {
-                    shufflePartitioningScheme = Optional.of(new PartitioningScheme(Partitioning.create(SCALED_WRITER_DISTRIBUTION, ImmutableList.of()), source.getNode().getOutputVariables()));
+                    PlanNodeStatsEstimate estimate = statsProvider.getStats(node.getSource());
+                    boolean outputSizeLarge = estimate.getSourceInfo() instanceof HistoryBasedSourceInfo && estimate.getOutputSizeInBytes() > getSkipScaleWriterDataSizeThreshold(session).toBytes();
+                    if (!outputSizeLarge) {
+                        shufflePartitioningScheme = Optional.of(new PartitioningScheme(Partitioning.create(SCALED_WRITER_DISTRIBUTION, ImmutableList.of()), source.getNode().getOutputVariables()));
+                    }
                 }
                 else if (redistributeWrites) {
                     shufflePartitioningScheme = Optional.of(new PartitioningScheme(Partitioning.create(FIXED_ARBITRARY_DISTRIBUTION, ImmutableList.of()), source.getNode().getOutputVariables()));

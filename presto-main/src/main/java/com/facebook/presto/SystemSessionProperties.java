@@ -127,6 +127,7 @@ public final class SystemSessionProperties
     public static final String QUERY_MAX_STAGE_COUNT = "query_max_stage_count";
     public static final String REDISTRIBUTE_WRITES = "redistribute_writes";
     public static final String SCALE_WRITERS = "scale_writers";
+    public static final String SKIP_SCALE_WRITERS_DATA_SIZE_THRESHOLD = "skip_scale_writers_data_size_threshold";
     public static final String WRITER_MIN_SIZE = "writer_min_size";
     public static final String OPTIMIZED_SCALE_WRITER_PRODUCER_BUFFER = "optimized_scale_writer_producer_buffer";
     public static final String PUSH_TABLE_WRITE_THROUGH_UNION = "push_table_write_through_union";
@@ -515,6 +516,15 @@ public final class SystemSessionProperties
                         VARCHAR,
                         DataSize.class,
                         featuresConfig.getWriterMinSize(),
+                        false,
+                        value -> DataSize.valueOf((String) value),
+                        DataSize::toString),
+                new PropertyMetadata<>(
+                        SKIP_SCALE_WRITERS_DATA_SIZE_THRESHOLD,
+                        "Skip scale writer when output data size exceeds the threshold",
+                        VARCHAR,
+                        DataSize.class,
+                        featuresConfig.getSkipScaleWriterThreshold(),
                         false,
                         value -> DataSize.valueOf((String) value),
                         DataSize::toString),
@@ -2008,6 +2018,11 @@ public final class SystemSessionProperties
     public static DataSize getWriterMinSize(Session session)
     {
         return session.getSystemProperty(WRITER_MIN_SIZE, DataSize.class);
+    }
+
+    public static DataSize getSkipScaleWriterDataSizeThreshold(Session session)
+    {
+        return session.getSystemProperty(SKIP_SCALE_WRITERS_DATA_SIZE_THRESHOLD, DataSize.class);
     }
 
     public static boolean isOptimizedScaleWriterProducerBuffer(Session session)
