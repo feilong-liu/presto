@@ -25,6 +25,7 @@ import com.facebook.presto.spi.plan.MarkDistinctNode;
 import com.facebook.presto.spi.plan.MergeJoinNode;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.PlanNodeId;
+import com.facebook.presto.spi.plan.SemiJoinNode;
 import com.facebook.presto.spi.plan.TableScanNode;
 import com.facebook.presto.spi.plan.TableWriterNode;
 import com.facebook.presto.spi.plan.WindowNode;
@@ -39,6 +40,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 import static com.facebook.presto.SystemSessionProperties.GROUPED_EXECUTION;
+import static com.facebook.presto.SystemSessionProperties.isEnableBucketExecutionForNonAntiSemiJoin;
 import static com.facebook.presto.SystemSessionProperties.isGroupedExecutionEnabled;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_PLAN_ERROR;
 import static com.facebook.presto.spi.connector.ConnectorCapabilities.SUPPORTS_PAGE_SINK_COMMIT;
@@ -140,6 +142,56 @@ class GroupedExecutionTagger
                 return left;
             default:
                 throw new UnsupportedOperationException("Unknown distribution type: " + node.getDistributionType());
+        }
+    }
+
+    @Override
+    public GroupedExecutionProperties visitSemiJoin(SemiJoinNode node, Void context)
+    {
+        if (isEnableBucketExecutionForNonAntiSemiJoin(session))
+        {
+            GroupedExecutionTagger.GroupedExecutionProperties left = node.getSource().accept(this, null);
+            GroupedExecutionTagger.GroupedExecutionProperties right = node.getFilteringSource().accept(this, null);
+
+            if (!node.getDistributionType().isPresent() || !groupedExecutionEnabled) {
+                // This is possible when the optimizers is invoked with `noExchange` set to true.
+                return GroupedExecutionTagger.GroupedExecutionProperties.notCapable();
+            }
+            switch (node.getDistributionType().get()) {
+                case REPLICATED:
+                    // Broadcast join maintains partitioning for the left side.
+                    // Right side of a broadcast is not capable of grouped execution because it always comes from a remote exchange.
+                    checkState(!right.currentNodeCapable);
+                    return left;
+                case PARTITIONED:
+                    if (left.currentNodeCapable && right.currentNodeCapable) {
+                        checkState(left.totalLifespans == right.totalLifespans, format("Mismatched number of lifespans on left(%s) and right(%s) side of join", left.totalLifespans, right.totalLifespans));
+                        return new GroupedExecutionTagger.GroupedExecutionProperties(
+                                true,
+                                true,
+                                ImmutableList.<PlanNodeId>builder()
+                                        .addAll(left.capableTableScanNodes)
+                                        .addAll(right.capableTableScanNodes)
+                                        .build(),
+                                left.totalLifespans,
+                                left.recoveryEligible && right.recoveryEligible);
+                    }
+                    // right.subTreeUseful && !left.currentNodeCapable:
+                    //   It's not particularly helpful to do grouped execution on the right side
+                    //   because the benefit is likely cancelled out due to required buffering for hash build.
+                    //   In theory, it could still be helpful (e.g. when the underlying aggregation's intermediate group state maybe larger than aggregation output).
+                    //   However, this is not currently implemented. JoinBridgeManager need to support such a lifecycle.
+                    // !right.currentNodeCapable:
+                    //   The build/right side needs to buffer fully for this JOIN, but the probe/left side will still stream through.
+                    //   As a result, there is no reason to change currentNodeCapable or subTreeUseful to false.
+                    //
+                    return left;
+                default:
+                    throw new UnsupportedOperationException("Unknown distribution type: " + node.getDistributionType());
+            }
+        }
+        else {
+            return visitPlan(node, context);
         }
     }
 

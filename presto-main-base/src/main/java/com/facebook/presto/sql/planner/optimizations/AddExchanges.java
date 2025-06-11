@@ -111,6 +111,7 @@ import static com.facebook.presto.SystemSessionProperties.isAddPartialNodeForRow
 import static com.facebook.presto.SystemSessionProperties.isColocatedJoinEnabled;
 import static com.facebook.presto.SystemSessionProperties.isDistributedIndexJoinEnabled;
 import static com.facebook.presto.SystemSessionProperties.isDistributedSortEnabled;
+import static com.facebook.presto.SystemSessionProperties.isEnableBucketExecutionForNonAntiSemiJoin;
 import static com.facebook.presto.SystemSessionProperties.isExactPartitioningPreferred;
 import static com.facebook.presto.SystemSessionProperties.isForceSingleNodeOutput;
 import static com.facebook.presto.SystemSessionProperties.isPreferDistributedUnion;
@@ -707,7 +708,18 @@ public class AddExchanges
                 return planTableScan((TableScanNode) node.getSource(), node.getPredicate());
             }
 
-            return rebaseAndDeriveProperties(node, planChild(node, preferredProperties));
+            PlanWithProperties result;
+            if (nativeExecution && node.getSource() instanceof SemiJoinNode && node.getPredicate().equals(((SemiJoinNode) node.getSource()).getSemiJoinOutput()) && isEnableBucketExecutionForNonAntiSemiJoin(session)) {
+                result = visitSemiJoinUtil((SemiJoinNode) node.getSource(), preferredProperties, true);
+                result = new PlanWithProperties(
+                        result.getNode().assignStatsEquivalentPlanNode(node.getSource().getStatsEquivalentPlanNode()),
+                        result.getProperties());
+            }
+            else {
+                result = planChild(node, preferredProperties);
+            }
+
+            return rebaseAndDeriveProperties(node, result);
         }
 
         @Override
@@ -1098,6 +1110,11 @@ public class AddExchanges
         @Override
         public PlanWithProperties visitSemiJoin(SemiJoinNode node, PreferredProperties preferredProperties)
         {
+            return visitSemiJoinUtil(node, preferredProperties, false);
+        }
+
+        private PlanWithProperties visitSemiJoinUtil(SemiJoinNode node, PreferredProperties preferredProperties, boolean ignoreNull)
+        {
             PlanWithProperties source;
             PlanWithProperties filteringSource;
 
@@ -1115,8 +1132,10 @@ public class AddExchanges
                     Partitioning filteringPartitioning = source.getProperties().translateVariable(createTranslator(sourceToFiltering)).getNodePartitioning().get();
                     filteringSource = accept(node.getFilteringSource(), PreferredProperties.partitionedWithNullsAndAnyReplicated(filteringPartitioning));
                     // TODO: Deprecate compatible table partitioning
-                    if (!source.getProperties().withReplicatedNulls(true).isCompatibleTablePartitioningWith(filteringSource.getProperties(), sourceToFiltering::get, metadata, session) &&
-                            !(filteringSource.getProperties().withReplicatedNulls(true).isRefinedPartitioningOver(source.getProperties(), filteringToSource::get, metadata, session) &&
+                    ActualProperties sourceProperties = ignoreNull ? source.getProperties() : source.getProperties().withReplicatedNulls(true);
+                    ActualProperties filteringSourceProperties = ignoreNull ? filteringSource.getProperties() : filteringSource.getProperties().withReplicatedNulls(true);
+                    if (!sourceProperties.isCompatibleTablePartitioningWith(filteringSource.getProperties(), sourceToFiltering::get, metadata, session) &&
+                            !(filteringSourceProperties.isRefinedPartitioningOver(source.getProperties(), filteringToSource::get, metadata, session) &&
                                     canPushdownPartialMerge(filteringSource.getNode(), partialMergePushdownStrategy))) {
                         filteringSource = withDerivedProperties(
                                 partitionedExchange(idAllocator.getNextId(), REMOTE_STREAMING, filteringSource.getNode(), new PartitioningScheme(
@@ -1154,9 +1173,11 @@ public class AddExchanges
                     }
                 }
 
-                verify(source.getProperties().withReplicatedNulls(true).isCompatibleTablePartitioningWith(filteringSource.getProperties(), sourceToFiltering::get, metadata, session) ||
+                ActualProperties sourceProperties = ignoreNull ? source.getProperties() : source.getProperties().withReplicatedNulls(true);
+                ActualProperties filteringSourceProperties = ignoreNull ? filteringSource.getProperties() : filteringSource.getProperties().withReplicatedNulls(true);
+                verify(sourceProperties.isCompatibleTablePartitioningWith(filteringSource.getProperties(), sourceToFiltering::get, metadata, session) ||
                         // TODO: Deprecate compatible table partitioning
-                        (filteringSource.getProperties().withReplicatedNulls(true).isRefinedPartitioningOver(source.getProperties(), filteringToSource::get, metadata, session) && canPushdownPartialMerge(filteringSource.getNode(), partialMergePushdownStrategy)));
+                        (filteringSourceProperties.isRefinedPartitioningOver(source.getProperties(), filteringToSource::get, metadata, session) && canPushdownPartialMerge(filteringSource.getNode(), partialMergePushdownStrategy)));
 
                 // if colocated joins are disabled, force redistribute when using a custom partitioning
                 if (!isColocatedJoinEnabled(session) && hasMultipleTableScans(source.getNode(), filteringSource.getNode())) {

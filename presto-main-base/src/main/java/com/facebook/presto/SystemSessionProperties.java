@@ -333,6 +333,7 @@ public final class SystemSessionProperties
     public static final String QUERY_CLIENT_TIMEOUT = "query_client_timeout";
     public static final String REWRITE_MIN_MAX_BY_TO_TOP_N = "rewrite_min_max_by_to_top_n";
     public static final String ADD_DISTINCT_BELOW_SEMI_JOIN_BUILD = "add_distinct_below_semi_join_build";
+    public static final String ENABLE_BUCKET_EXECUTION_FOR_NON_ANTI_SEMI_JOIN = "enable_bucket_execution_for_non_anti_semi_join";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_AGGREGATION_SPILL_ALL = "native_aggregation_spill_all";
@@ -1908,6 +1909,10 @@ public final class SystemSessionProperties
                         false,
                         value -> Duration.valueOf((String) value),
                         Duration::toString),
+                booleanProperty(ENABLE_BUCKET_EXECUTION_FOR_NON_ANTI_SEMI_JOIN,
+                        "When semi join is not anti join, enable bucket execution if possible",
+                        false,
+                        false),
                 booleanProperty(ADD_DISTINCT_BELOW_SEMI_JOIN_BUILD,
                         "Add distinct aggregation below semi join build",
                         featuresConfig.isAddDistinctBelowSemiJoinBuild(),
@@ -3241,6 +3246,11 @@ public final class SystemSessionProperties
     public static boolean isEnabledAddExchangeBelowGroupId(Session session)
     {
         return session.getSystemProperty(ADD_EXCHANGE_BELOW_PARTIAL_AGGREGATION_OVER_GROUP_ID, Boolean.class);
+    }
+
+    public static boolean isEnableBucketExecutionForNonAntiSemiJoin(Session session)
+    {
+        return session.getSystemProperty(ENABLE_BUCKET_EXECUTION_FOR_NON_ANTI_SEMI_JOIN, Boolean.class);
     }
 
     public static boolean isAddDistinctBelowSemiJoinBuildEnabled(Session session)
