@@ -17,6 +17,7 @@ import com.facebook.airlift.units.DataSize;
 import com.facebook.airlift.units.Duration;
 import com.facebook.presto.common.WarningHandlingLevel;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
+import com.facebook.presto.common.resourceGroups.QueryType;
 import com.facebook.presto.cost.HistoryBasedOptimizationConfig;
 import com.facebook.presto.execution.QueryManagerConfig;
 import com.facebook.presto.execution.QueryManagerConfig.ExchangeMaterializationStrategy;
@@ -270,6 +271,7 @@ public final class SystemSessionProperties
     public static final String ENABLE_VERBOSE_HISTORY_BASED_OPTIMIZER_RUNTIME_STATS = "enable_verbose_history_based_optimizer_runtime_stats";
     public static final String LOG_QUERY_PLANS_USED_IN_HISTORY_BASED_OPTIMIZER = "log_query_plans_used_in_history_based_optimizer";
     public static final String ENFORCE_HISTORY_BASED_OPTIMIZER_REGISTRATION_TIMEOUT = "enforce_history_based_optimizer_register_timeout";
+    public static final String QUERY_TYPES_ENABLED_FOR_HISTORY_BASED_OPTIMIZATION = "query_types_enabled_for_history_based_optimization";
     public static final String MAX_LEAF_NODES_IN_PLAN = "max_leaf_nodes_in_plan";
     public static final String LEAF_NODE_LIMIT_ENABLED = "leaf_node_limit_enabled";
     public static final String PUSH_REMOTE_EXCHANGE_THROUGH_GROUP_ID = "push_remote_exchange_through_group_id";
@@ -1546,6 +1548,14 @@ public final class SystemSessionProperties
                         ENFORCE_HISTORY_BASED_OPTIMIZER_REGISTRATION_TIMEOUT,
                         "Enforce timeout for query registration in HBO optimizer",
                         featuresConfig.isEnforceTimeoutForHBOQueryRegistration(),
+                        false),
+                stringProperty(
+                        QUERY_TYPES_ENABLED_FOR_HISTORY_BASED_OPTIMIZATION,
+                        format("Query types which are enabled for history based optimization. Options are %s",
+                                Stream.of(QueryType.values())
+                                        .map(QueryType::name)
+                                        .collect(joining(","))),
+                        featuresConfig.getQueryTypesEnabledForHbo(),
                         false),
                 new PropertyMetadata<>(
                         MAX_LEAF_NODES_IN_PLAN,
@@ -3004,6 +3014,20 @@ public final class SystemSessionProperties
         }
 
         return strategyList;
+    }
+
+    public static List<QueryType> getQueryTypesEnabledForHBO(Session session)
+    {
+        List<QueryType> queryTypes;
+        try {
+            queryTypes = Splitter.on(",").trimResults().splitToList(session.getSystemProperty(QUERY_TYPES_ENABLED_FOR_HISTORY_BASED_OPTIMIZATION, String.class)).stream()
+                    .map(QueryType::valueOf).collect(toImmutableList());
+        }
+        catch (Exception e) {
+            queryTypes = ImmutableList.of();
+        }
+
+        return queryTypes;
     }
 
     public static boolean enableVerboseHistoryBasedOptimizerRuntimeStats(Session session)

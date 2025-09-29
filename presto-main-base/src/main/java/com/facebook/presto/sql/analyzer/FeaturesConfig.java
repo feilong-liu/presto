@@ -106,6 +106,7 @@ public class FeaturesConfig
     private boolean logPlansUsedInHistoryBasedOptimizer;
     private boolean enforceTimeoutForHBOQueryRegistration;
     private boolean historyBasedOptimizerEstimateSizeUsingVariables;
+    private String queryTypesEnabledForHbo = "SELECT,INSERT";
     private boolean redistributeWrites;
     private boolean scaleWriters = true;
     private DataSize writerMinSize = new DataSize(32, MEGABYTE);
@@ -867,6 +868,19 @@ public class FeaturesConfig
     public FeaturesConfig setHistoryBasedOptimizerPlanCanonicalizationStrategies(String historyBasedOptimizerPlanCanonicalizationStrategies)
     {
         this.historyBasedOptimizerPlanCanonicalizationStrategies = historyBasedOptimizerPlanCanonicalizationStrategies;
+        return this;
+    }
+
+    @NotNull
+    public String getQueryTypesEnabledForHbo()
+    {
+        return queryTypesEnabledForHbo;
+    }
+
+    @Config("optimizer.query-types-enabled-for-hbo")
+    public FeaturesConfig setQueryTypesEnabledForHbo(String queryTypesEnabledForHbo)
+    {
+        this.queryTypesEnabledForHbo = queryTypesEnabledForHbo;
         return this;
     }
 
