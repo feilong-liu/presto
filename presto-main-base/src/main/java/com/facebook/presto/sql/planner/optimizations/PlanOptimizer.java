@@ -58,16 +58,15 @@ public interface PlanOptimizer
             WarningCollector warningCollector)
     {
         setEnabledForTesting(true);
-
-        boolean isApplicable = false;
         try {
-            // wrap in try/catch block in case optimization throws an error
             PlanOptimizerResult optimizerResult = optimize(plan, session, types, variableAllocator, idAllocator, warningCollector);
-            isApplicable = optimizerResult.isOptimizerTriggered();
+            return optimizerResult.isOptimizerTriggered();
+        }
+        catch (Exception e) {
+            return false;
         }
         finally {
             setEnabledForTesting(false);
-            return isApplicable;
         }
     }
 }
